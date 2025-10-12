@@ -33,7 +33,7 @@ For a full deep dive into the proposed system, see [`docs/ARCHITECTURE.md`](docs
 | Module | Purpose | Key Technologies |
 |--------|---------|------------------|
 | `orchestrator` | Coordinates agent lifecycles and workflows | `asyncio`, `Temporal`/`Celery`, `Pydantic` |
-| `agent_factory` | Generates personas and manages metadata | `Faker`, `SQLAlchemy`, `pydantic` |
+| `agent_factory` | Generates bots and manages metadata | `Faker`, `SQLAlchemy`, `pydantic` |
 | `content_engine` | Draft generation, scoring, compliance pre-checks | `FastAPI`, `LangChain`, `transformers` |
 | `scheduler` | Rate-limited publishing and approvals | `APScheduler`, `Redis`, `Arq`/`Celery` |
 | `compliance_guard` | Policy enforcement and audit trails | `spaCy`, `OpenAI moderation`, `structlog` |
@@ -42,7 +42,7 @@ For a full deep dive into the proposed system, see [`docs/ARCHITECTURE.md`](docs
 | `integration` | External platform adapters & mailbox stubs | `HTTPX`, SDK-specific clients |
 
 ## 🚀 Minimum Viable Features
-1. **Bot identity generation** with persistent metadata and persona templates.
+1. **Bot identity generation** with persistent metadata and bot templates.
 2. **Content drafting pipeline** with scoring and compliance checks.
 3. **Feed simulation** to rehearse campaigns safely.
 4. **Rate-limited scheduler** for approval and publication workflows.

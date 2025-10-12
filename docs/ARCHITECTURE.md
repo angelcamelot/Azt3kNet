@@ -169,9 +169,9 @@ This document defines the recommended end-state architecture for **Azt3kNet**, a
 - **Technologies:** asyncio, fastapi background tasks, Celery/Arq for distributed job offloading.
 
 ### `agent_factory`
-- **Purpose:** Generate and manage bot identities with persistent metadata and persona templates.
+- **Purpose:** Generate and manage bot identities with persistent metadata and bot templates.
 - **Key Components:**
-  - `identity.py`: Persona synthesis logic using prompt templates and demographic datasets.
+  - `identity.py`: Bot identity synthesis logic using prompt templates and demographic datasets.
   - `metadata.py`: Persistent metadata schema, enrichment, and validation.
   - `registry.py`: Registry of available agent blueprints and provisioning pipeline hooks.
 - **Technologies:** Faker, synthetic data generators, SQLAlchemy models, possibly graph-based relationships.
@@ -277,7 +277,7 @@ This document defines the recommended end-state architecture for **Azt3kNet**, a
 ## MVP Functional Plan
 
 1. **Bot Identity Generation**
-   - `agent_factory.identity`: Create personas via templates and data augmentation.
+   - `agent_factory.identity`: Create bots via templates and data augmentation.
    - Persist metadata via `storage.repositories.agents`.
    - Expose provisioning API endpoint `/agents/provision` and CLI command `azt3knet agents provision`.
 
