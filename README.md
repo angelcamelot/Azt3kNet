@@ -195,6 +195,23 @@ poetry run pytest
 5. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
 6. Use the CLI/API according to the flows above.
 
+### Sprint 1 (Functional Inception)
+
+The first sprint delivers the foundations for deterministic synthetic populations:
+
+- **Shared configuration** powered by Pydantic settings and deterministic seed helpers.
+- **Agent factory** that generates reproducible `AgentProfile` records from population specs.
+- **CLI command** `azt3knet populate` for local experimentation with preview limits and JSON output.
+- **FastAPI endpoint** `POST /api/populate` mirroring the CLI surface for orchestration prototypes.
+- **Basic observability hooks** (`configure_logging`) to maintain consistent logs across surfaces.
+
+Run the included tests to validate determinism and interfaces:
+
+```bash
+poetry install
+poetry run pytest
+```
+
 ## 🤝 Contributing
 
 - Follow linting and type-checking conventions (`ruff`, `mypy`).
