@@ -5,6 +5,7 @@ Azt3kNet is a research-oriented Python system that models networks of digital ag
 ## 🚀 Key Capabilities
 
 - **Synthetic population generation** from parameterized specifications (gender, location, age, interests) transformed into structured prompts for Ollama.
+- **DeepSeek-powered identity crafting** so every agent receives a unique name generated locally with the lightweight `deepseek-r1:1.5b` Ollama model.
 - **Controlled Content Engine** that produces drafts, captions, alt-text, hashtags, and variations with explanatory metadata and compliance scores.
 - **Feed simulator** that orchestrates posts, comments, reactions, and conversation chains with a configurable affinity graph.
 - **Always-on Compliance Guard** that labels or blocks risky content and audits every decision.
@@ -213,11 +214,11 @@ modules live under `azt3knet.services` and expose:
 * `MailService` – SMTP/IMAP convenience wrapper to send and fetch emails per
   agent.
 
-3. Pull the Ollama model the first time you run the stack (replace `llama2`
-   with the value you configured in `infra/docker/.env`):
+3. Pull the Ollama model the first time you run the stack (replace
+   `deepseek-r1:1.5b` with the value you configured in `infra/docker/.env`):
 
    ```bash
-   docker compose exec ollama ollama pull llama2
+   docker compose exec ollama ollama pull deepseek-r1:1.5b
    ```
 
 4. The API is now available at [http://localhost:8000](http://localhost:8000).
