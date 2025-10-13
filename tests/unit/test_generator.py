@@ -46,3 +46,14 @@ def test_generate_agents_produces_unique_username_hints():
     agents = generate_agents(spec)
     hints = [agent.username_hint for agent in agents]
     assert len(hints) == len(set(hints))
+
+
+def test_generate_agents_produces_independent_interest_lists():
+    spec = PopulationSpec(count=2, country="MX", seed="seed-independent", interests=["Music", "Art"])
+    agents = generate_agents(spec)
+
+    assert agents[0].interests is not agents[1].interests
+
+    agents[0].interests.append("new interest")
+
+    assert agents[1].interests == ["music", "art"]
