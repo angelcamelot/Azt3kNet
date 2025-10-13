@@ -182,10 +182,72 @@ poetry run pytest
 2. **Proactive moderation.** Risky content is blocked or labeled and never published without explicit review.
 3. **Responsible LLM usage.** Ollama runs locally; model versions and parameters are documented.
 
-## 🔧 Getting Started (Summary)
+## 🛠️ Pre-requisites and First-time Setup
 
-1. Install [Ollama](https://ollama.ai/) and download the required model (`ollama pull <model>`).
-2. Copy the provided environment templates and adjust them to your workstation:
+The project assumes a fresh workstation with Docker, Poetry, and Ollama available. The following steps walk through the whole
+process so that you can `populate` your first synthetic population without having to cross-reference external guides.
+
+### 1. Install Docker
+
+#### macOS (Docker Desktop)
+
+1. Download [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/).
+2. Open the downloaded `.dmg` file, drag Docker into `Applications`, and launch it.
+3. Grant the required permissions when prompted (networking, privileged access).
+4. Confirm the installation by running `docker --version` from a new terminal.
+
+#### Ubuntu/Debian (Docker Engine + Compose plugin)
+
+```bash
+sudo apt-get update
+sudo apt-get install ca-certificates curl gnupg lsb-release
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker "$USER"
+newgrp docker
+docker --version
+docker compose version
+```
+
+> ℹ️ After running `usermod`, you may need to log out and log back in for group membership to take effect.
+
+For other operating systems, follow the [official Docker installation guide](https://docs.docker.com/engine/install/).
+
+### 2. Install Poetry (Python environment manager)
+
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+poetry --version
+```
+
+If you prefer a system package manager (e.g., `pipx install poetry`), make sure the `poetry` CLI is available in your `$PATH`.
+
+### 3. Install Ollama and download the models used by Azt3kNet
+
+1. Follow the [Ollama installation guide](https://ollama.ai/download) for your OS.
+2. Verify the CLI with `ollama --version`.
+3. Pull the models needed by the pipelines, for example:
+
+   ```bash
+   ollama pull llama3
+   # Add more models as required by your prompts/templates
+   ```
+
+### 4. Clone the repository
+
+```bash
+git clone https://github.com/<org>/Azt3kNet.git
+cd Azt3kNet
+```
+
+### 5. Bootstrap environment files
+
+Copy the provided environment templates and adjust them to your workstation:
 
    ```bash
    ./scripts/bootstrap_env.sh
@@ -193,11 +255,73 @@ poetry run pytest
 
    This command creates `.env` and `infra/docker/.env` from their respective templates.
 
-3. Set up the Python environment (e.g., `poetry install`).
-4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh`.
-5. Run migrations (`azt3knet db upgrade`).
-6. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
-7. Use the CLI/API according to the flows above.
+### 6. Install Python dependencies
+
+```bash
+poetry install
+```
+
+If you are using a local Python version manager (e.g., `pyenv`), ensure the interpreter matches the version declared in
+`pyproject.toml` before running the command above.
+
+### 7. Start the local stack with Docker
+
+The `infra/docker` directory contains a `docker-compose` configuration that launches Redis, Postgres, and helper services used by
+the CLI/API. Start everything with:
+
+```bash
+./scripts/dev_up.sh
+```
+
+Verify the services are running:
+
+```bash
+docker ps
+```
+
+To stop the stack:
+
+```bash
+./scripts/dev_down.sh
+```
+
+### 8. Apply database migrations
+
+```bash
+poetry run azt3knet db upgrade
+```
+
+### 9. Launch the API and worker processes
+
+In separate terminals (or using a process manager), run:
+
+```bash
+poetry run uvicorn azt3knet.api.main:app --reload
+poetry run azt3knet worker
+```
+
+With these services running, both the CLI and API can enqueue jobs and interact with the synthetic population pipeline.
+
+### 10. Generate your first population
+
+```bash
+poetry run azt3knet populate \
+  --gender female \
+  --count 10 \
+  --country MX \
+  --seed 20241005 \
+  --preview 5
+```
+
+You should see a preview of the generated agents. Remove `--preview` to persist the population using the configured storage
+backend.
+
+---
+
+## 🔧 Getting Started (Summary)
+
+1. Install [Ollama](https://ollama.ai/) and download the required model (`ollama pull <model>`).
+2. Copy the provided environment templates and adjust them to your workstation:
 
 ### Sprint 1 (Functional Inception)
 
