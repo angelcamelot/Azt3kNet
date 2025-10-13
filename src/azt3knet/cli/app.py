@@ -44,7 +44,8 @@ def populate(
         None, help="Inclusive age range formatted as 'min-max' (e.g. 18-35)."
     ),
     interests: Optional[str] = typer.Option(
-        None, help="Comma separated list of interests (e.g. 'cumbia,arte urbano')."
+        None,
+        help="Comma separated list of interests (e.g. 'street art,urban culture').",
     ),
     seed: Optional[str] = typer.Option(None, help="Deterministic seed."),
     preview: Optional[int] = typer.Option(None, help="Preview the first N agents."),
