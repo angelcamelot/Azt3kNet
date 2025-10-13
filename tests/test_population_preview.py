@@ -143,3 +143,56 @@ def test_build_population_mailbox_alias_fallback(monkeypatch, caplog) -> None:
     )
     assert provisioner.created == [expected_identifier]
     assert "Compliance guard rejected mailbox alias" in caplog.text
+
+
+def _make_agent(index: int) -> AgentProfile:
+    return AgentProfile(
+        id=uuid.UUID(int=index + 1),
+        seed=f"seed:{index}",
+        name=f"Agent {index}",
+        username_hint=f"agent_{index}",
+        country="US",
+        city="",
+        locale="en_US",
+        timezone="America/New_York",
+        age=30,
+        gender="unspecified",
+        interests=["digital culture"],
+        bio="Bio",
+        posting_cadence="daily",
+        tone="informative",
+        behavioral_biases=["early_adopter"],
+    )
+
+
+def test_mailbox_identifier_generates_high_entropy_suffix() -> None:
+    agent = _make_agent(0)
+    sequence = SeedSequence("batch-seed")
+    identifier = population_builder._mailbox_identifier(agent, "Alias Example", sequence, 0)
+
+    prefix = "aliasexample"
+    assert identifier.startswith(prefix)
+    suffix = identifier[len(prefix) :]
+    assert len(suffix) == 13
+    assert suffix.isalnum()
+    assert suffix == suffix.lower()
+
+
+def test_mailbox_identifier_unique_for_large_batch() -> None:
+    sequence = SeedSequence("batch-seed")
+    identifiers = {
+        population_builder._mailbox_identifier(_make_agent(idx), "batch", sequence, idx)
+        for idx in range(5000)
+    }
+
+    assert len(identifiers) == 5000
+
+
+def test_mailbox_identifier_preserves_legacy_alias() -> None:
+    agent = _make_agent(42)
+    sequence = SeedSequence("legacy-seed")
+    legacy_alias = "legacyuser0042"
+
+    identifier = population_builder._mailbox_identifier(agent, legacy_alias, sequence, 0)
+
+    assert identifier == legacy_alias

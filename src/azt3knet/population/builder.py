@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
@@ -109,12 +110,35 @@ def _provisioner_from_settings(
     return MailcowProvisioner(mailcow_settings, provisioning_settings)
 
 
+_LEGACY_ALIAS_PATTERN = re.compile(r"^([a-z0-9]{1,28})\d{4}$")
+
+
+def _encode_base36(value: int, *, length: int) -> str:
+    """Return a zero-padded base36 string using lowercase characters."""
+
+    alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+    chars: list[str] = []
+    working = value
+    for _ in range(length):
+        working, remainder = divmod(working, 36)
+        chars.append(alphabet[remainder])
+    return "".join(reversed(chars))
+
+
 def _mailbox_identifier(
     agent: AgentProfile, alias_source: str, sequence: SeedSequence, index: int
 ) -> str:
     alias = _sanitize_local_part(alias_source, agent.username_hint)
-    suffix = sequence.derive("mailbox", agent.seed, str(index)) % 10_000
-    return f"{alias}{suffix:04d}"
+    # Preserve legacy identifiers (alias + four digits) to avoid re-provisioning
+    # existing mailboxes when rebuilding a population.
+    if _LEGACY_ALIAS_PATTERN.match(alias):
+        return alias
+
+    high_bits = sequence.derive("mailbox", agent.seed, str(index), "hi")
+    low_bits = sequence.derive("mailbox", agent.seed, str(index), "lo")
+    combined = (high_bits << 32) | low_bits
+    suffix = _encode_base36(combined, length=13)
+    return f"{alias}{suffix}"
 
 
 def build_population(

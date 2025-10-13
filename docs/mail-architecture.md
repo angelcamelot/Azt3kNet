@@ -53,6 +53,20 @@ wraps the REST API. It can:
 * optionally configure an outbound SMTP relay such as Sendgrid when direct port
   25 access is unavailable
 
+### Mailbox naming strategy
+
+Mailbox identifiers are generated from a human-friendly alias suggested by the
+LLM or derived from the agent username hint. The alias is sanitized to contain
+only lowercase alphanumeric characters (maximum 32) and then suffixed with a
+deterministic 13-character base36 string derived from the population seed via
+`SeedSequence`. The suffix is composed from two independent derivations
+(`"hi"`/`"lo"`) mixed into a 64-bit value before encoding, yielding more than
+enough entropy to avoid collisions even when provisioning millions of agents.
+
+For compatibility with existing deployments, aliases that already match the
+legacy format (`<alias><four digits>`) are preserved as-is so that rebuilding a
+population does not attempt to rename existing mailboxes.
+
 Minimal provisioning example:
 
 ```python
