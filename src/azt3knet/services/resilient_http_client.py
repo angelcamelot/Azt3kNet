@@ -147,6 +147,7 @@ class ResilientHTTPClient:
         self._breaker = circuit_breaker or CircuitBreaker()
         self.metrics = metrics or ClientMetrics(service_name=service_name)
         self._sleep = sleep
+        self._retry_statuses = frozenset(self._retry_config.retry_statuses)
 
     def close(self) -> None:
         self._client.close()
@@ -161,7 +162,7 @@ class ResilientHTTPClient:
         return delay
 
     def _should_retry_response(self, response: httpx.Response) -> bool:
-        return self._retry_config.should_retry(response.status_code)
+        return response.status_code in self._retry_statuses
 
     def request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Issue a resilient HTTP request."""

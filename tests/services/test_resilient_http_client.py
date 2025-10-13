@@ -54,6 +54,33 @@ def test_retries_apply_exponential_backoff() -> None:
     assert metrics["rate_limited_responses"] == 2
 
 
+def test_custom_retry_statuses_are_honoured() -> None:
+    attempts = itertools.count(1)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        if next(attempts) == 1:
+            return httpx.Response(418)
+        return httpx.Response(200)
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://service.local"
+    )
+    retry_config = RetryConfiguration(max_retries=1, retry_statuses=(418,))
+    resilient = ResilientHTTPClient(
+        client,
+        service_name="test-service",
+        retry_config=retry_config,
+        sleep=lambda _: None,
+    )
+
+    response = resilient.request("GET", "/resource")
+
+    assert response.status_code == 200
+    metrics = resilient.metrics.as_dict()
+    assert metrics["total_requests"] == 2
+    assert metrics["total_retries"] == 1
+
+
 def test_circuit_breaker_blocks_requests_until_recovered() -> None:
     clock = DummyClock()
 
