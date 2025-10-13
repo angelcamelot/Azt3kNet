@@ -10,7 +10,7 @@ from typing import List
 
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
-from azt3knet.compliance_guard import ensure_guarded_llm
+from azt3knet.compliance_guard import ComplianceViolation, ensure_guarded_llm
 from azt3knet.core.config import derive_seed_components, resolve_seed
 from azt3knet.core.mail_config import (
     MailcowSettings,
@@ -148,13 +148,22 @@ def build_population(
                     f"Generate a lowercase alias (no spaces) for the mailbox of agent {agent.name} "
                     f"located in {agent.country}."
                 )
-                alias_text = guarded_llm.generate_field(
-                    LLMRequest(
-                        prompt=prompt,
-                        seed=deterministic_seed + index,
-                        field_name="mailbox_alias",
+                try:
+                    alias_text = guarded_llm.generate_field(
+                        LLMRequest(
+                            prompt=prompt,
+                            seed=deterministic_seed + index,
+                            field_name="mailbox_alias",
+                        )
                     )
-                )
+                except ComplianceViolation as exc:
+                    logger.warning(
+                        "Compliance guard rejected mailbox alias for agent %s: %s. "
+                        "Falling back to deterministic alias.",
+                        agent.id,
+                        exc,
+                    )
+                    alias_text = agent.username_hint
                 identifier = _mailbox_identifier(agent, alias_text, numeric_seed, index)
                 credentials = provisioner.create_agent_mailbox(
                     identifier,
