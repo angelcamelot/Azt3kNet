@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import random
 import threading
 import time
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Sequence
 
 import httpx
 
@@ -111,9 +111,22 @@ class RetryConfiguration:
     backoff_factor: float = 0.5
     max_backoff: float = 10.0
     jitter_ratio: float = 0.1
-    retry_statuses: Iterable[int] = field(
+    retry_statuses: Sequence[int] = field(
         default_factory=lambda: (408, 425, 429, 500, 502, 503, 504)
     )
+    _retry_status_set: frozenset[int] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        statuses = tuple(dict.fromkeys(self.retry_statuses))
+        if not statuses:
+            raise ValueError("retry_statuses must contain at least one status code")
+        object.__setattr__(self, "retry_statuses", statuses)
+        object.__setattr__(self, "_retry_status_set", frozenset(statuses))
+
+    def should_retry(self, status_code: int) -> bool:
+        """Return True when the response status should trigger a retry."""
+
+        return status_code in self._retry_status_set
 
 
 class ResilientHTTPClient:
@@ -148,7 +161,7 @@ class ResilientHTTPClient:
         return delay
 
     def _should_retry_response(self, response: httpx.Response) -> bool:
-        return response.status_code in set(self._retry_config.retry_statuses)
+        return self._retry_config.should_retry(response.status_code)
 
     def request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Issue a resilient HTTP request."""
@@ -185,6 +198,7 @@ class ResilientHTTPClient:
                         self.metrics.circuit_breaker_tripped += 1
                     if attempt >= max_attempts:
                         return response
+                    response.close()
                 else:
                     self.metrics.successful_requests += 1
                     self._breaker.record_success()
