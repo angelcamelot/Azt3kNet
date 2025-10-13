@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import itertools
 import uuid
-from typing import Iterable, List, Sequence
+import re
+from typing import Iterable, List
 
 from .models import AgentProfile, PopulationSpec
 from ..core.config import resolve_seed
 from ..core.seeds import SeedSequence, cycle_choices, shuffle_iterable
+from ..llm.adapter import LLMAdapter, LLMRequest, LocalLLMAdapter
 
 COUNTRY_TIMEZONES = {
     "MX": "America/Mexico_City",
@@ -20,13 +21,6 @@ COUNTRY_LOCALES = {
     "MX": "es_MX",
     "US": "en_US",
     "ES": "es_ES",
-}
-
-NAMES_BY_GENDER = {
-    "female": ["Avery", "Luna", "Harper", "Zoe", "Maya"],
-    "male": ["Ethan", "Leo", "Miles", "Luca", "Kai"],
-    "non_binary": ["Alex", "River", "Rowan", "Sky", "Phoenix"],
-    "unspecified": ["Sam", "Taylor", "Morgan", "Hayden", "Parker"],
 }
 
 DEFAULT_BEHAVIORS = [
@@ -46,13 +40,91 @@ def _normalize_interests(interests: Iterable[str] | None) -> List[str]:
     return [interest.strip().lower() for interest in interests if interest.strip()]
 
 
-def _choose_name(gender: str | None, index: int) -> str:
-    options: Sequence[str]
-    if gender and gender in NAMES_BY_GENDER:
-        options = NAMES_BY_GENDER[gender]
-    else:
-        options = list(itertools.chain.from_iterable(NAMES_BY_GENDER.values()))
-    return options[index % len(options)]
+_NAME_PROMPT_TEMPLATE = (
+    "You are DeepSeek, generating synthetic agent identities for research. "
+    "Return one distinctive first name for a {gender_desc} persona engaging "
+    "with audiences in {location_desc}. Respond with the name only."
+)
+
+_GENDER_DESCRIPTORS = {
+    "female": "feminine",
+    "male": "masculine",
+    "non_binary": "non-binary",
+    "unspecified": "gender-neutral",
+}
+
+_NAME_TOKEN_PATTERN = re.compile(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+")
+
+
+def _gender_descriptor(value: str | None) -> str:
+    if not value:
+        return _GENDER_DESCRIPTORS["unspecified"]
+    return _GENDER_DESCRIPTORS.get(value, _GENDER_DESCRIPTORS["unspecified"])
+
+
+def _location_descriptor(spec: PopulationSpec) -> str:
+    parts: List[str] = []
+    if spec.city:
+        parts.append(spec.city)
+    if spec.country:
+        parts.append(spec.country.upper())
+    if not parts:
+        return "global communities"
+    return "/".join(parts)
+
+
+def _sanitize_name(value: str) -> str:
+    tokens = _NAME_TOKEN_PATTERN.findall(value)
+    if not tokens:
+        return ""
+    primary = tokens[0].capitalize()
+    if len(tokens) == 1:
+        return primary
+    secondary = tokens[1].capitalize()
+    return f"{primary} {secondary}"
+
+
+def _fallback_name(sequence: SeedSequence, index: int, used: set[str]) -> str:
+    attempt = 0
+    while True:
+        candidate_number = sequence.derive("fallback-name", str(index), str(attempt)) % 10_000
+        candidate = f"Agente {candidate_number:04d}"
+        if candidate.lower() not in used:
+            return candidate
+        attempt += 1
+
+
+def _generate_agent_name(
+    *,
+    llm: LLMAdapter,
+    spec: PopulationSpec,
+    gender: str,
+    sequence: SeedSequence,
+    index: int,
+    used: set[str],
+) -> str:
+    gender_desc = _gender_descriptor(gender)
+    location_desc = _location_descriptor(spec)
+    base_prompt = _NAME_PROMPT_TEMPLATE.format(
+        gender_desc=gender_desc,
+        location_desc=location_desc,
+    )
+    for attempt in range(3):
+        seed_value = sequence.derive("name", str(index), str(attempt))
+        response = llm.generate_field(
+            LLMRequest(
+                prompt=f"{base_prompt} (option {attempt + 1})",
+                seed=seed_value,
+                field_name="agent_name",
+            )
+        )
+        sanitized = _sanitize_name(response)
+        if sanitized and sanitized.lower() not in used:
+            used.add(sanitized.lower())
+            return sanitized
+    fallback = _fallback_name(sequence, index, used)
+    used.add(fallback.lower())
+    return fallback
 
 
 def _build_bio(name: str, interests: List[str], city: str | None) -> str:
@@ -103,7 +175,7 @@ def _locale(country: str) -> str:
     return COUNTRY_LOCALES.get(country.upper(), "en_US")
 
 
-def generate_agents(spec: PopulationSpec) -> List[AgentProfile]:
+def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> List[AgentProfile]:
     """Generate deterministic agents from a specification."""
 
     seed = resolve_seed(spec.seed)
@@ -114,10 +186,19 @@ def generate_agents(spec: PopulationSpec) -> List[AgentProfile]:
     cadences = cycle_choices(POSTING_CADENCES, spec.count, rng_for_cadence)
     rng_for_tone = seed_sequence.random("tone")
     tones = cycle_choices(TONES, spec.count, rng_for_tone)
+    adapter = llm or LocalLLMAdapter()
+    used_names: set[str] = set()
 
     agents: List[AgentProfile] = []
     for idx in range(spec.count):
-        name = _choose_name(gender, idx)
+        name = _generate_agent_name(
+            llm=adapter,
+            spec=spec,
+            gender=gender,
+            sequence=seed_sequence,
+            index=idx,
+            used=used_names,
+        )
         username_hint = _username_hint(name, spec.city, seed_sequence, idx)
         agent = AgentProfile(
             id=uuid.uuid5(uuid.NAMESPACE_URL, f"azt3knet://agents/{seed}/{idx}"),

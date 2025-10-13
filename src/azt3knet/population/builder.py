@@ -119,7 +119,7 @@ def build_population(
     resolved_seed = resolve_seed(spec.seed)
     numeric_seed = SeedSequence(f"{resolved_seed}:{deterministic_seed}")
 
-    agents = generate_agents(spec)
+    agents = generate_agents(spec, llm=llm)
     if spec.preview:
         agents = agents[: spec.preview]
 

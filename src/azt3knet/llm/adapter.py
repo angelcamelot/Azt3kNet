@@ -38,7 +38,13 @@ class LocalLLMAdapter:
         "stride",
     )
 
-    def __init__(self, *, model: str = "ollama:latest") -> None:
+    def __init__(self, *, model: str = "deepseek-r1:1.5b") -> None:
+        """Initialize the adapter with the lightweight DeepSeek model name.
+
+        The real implementation running against Ollama should align with this
+        default so local previews mimic the production configuration.
+        """
+
         self.model = model
 
     def generate_field(self, request: LLMRequest) -> str:
