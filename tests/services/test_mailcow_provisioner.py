@@ -62,6 +62,37 @@ def test_create_agent_mailbox_issues_expected_requests(
     assert calls[1][0].endswith("/add/app-passwd")
 
 
+def test_create_agent_mailbox_preserves_falsy_values(
+    mailcow_settings: MailcowSettings, provisioning_settings: MailProvisioningSettings
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        json_payload = json.loads(request.content.decode()) if request.content else {}
+        if request.url.path.endswith("/add/mailbox"):
+            calls.append(json_payload)
+            return httpx.Response(200, json={"status": "success"})
+        if request.url.path.endswith("/add/app-passwd"):
+            return httpx.Response(200, json={"password": "app-secret"})
+        raise AssertionError(f"Unexpected request to {request.url}")
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        base_url=mailcow_settings.base_url,
+    )
+
+    provisioner = MailcowProvisioner(mailcow_settings, provisioning_settings, client=client)
+    credentials = provisioner.create_agent_mailbox(
+        "empty", password="", quota_mb=0, display_name=""
+    )
+
+    assert calls, "Expected at least one mailbox creation call"
+    payload = calls[0]
+    assert payload["password"] == ""
+    assert payload["quota"] == 0
+    assert credentials.password == ""
+
+
 def test_get_dkim_key_handles_list_response(
     mailcow_settings: MailcowSettings, provisioning_settings: MailProvisioningSettings
 ) -> None:

@@ -130,8 +130,10 @@ class MailcowProvisioner:
         """Create a mailbox for an agent and return its credentials."""
 
         local_part = self._mailbox_local_part(agent_id)
-        password = password or self.generate_password()
-        quota_mb = quota_mb or self._provisioning.mailbox_quota_mb
+        if password is None:
+            password = self.generate_password()
+        if quota_mb is None:
+            quota_mb = self._provisioning.mailbox_quota_mb
 
         payload: dict[str, Any] = {
             "active": "1",
