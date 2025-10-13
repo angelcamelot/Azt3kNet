@@ -1,46 +1,46 @@
 # 🜂 Azt3kNet
 
-> **Azt3kNet es una simulación local con datos 100 % sintéticos.** Nunca automatiza cuentas reales ni interactúa con plataformas externas.
+> **Azt3kNet is a local simulation built on 100% synthetic data.** It never automates real accounts or interacts with external platforms.
 
-Azt3kNet es un sistema Python orientado a investigación que modela redes de agentes digitales dentro de un entorno autocontenido. Todo el contenido y las poblaciones se generan localmente mediante [Ollama](https://ollama.ai/) y prompts programáticos con semillas deterministas para garantizar reproducibilidad, diversidad y ausencia de PII. La plataforma expone interfaces CLI y API para que otros equipos (por ejemplo, un frontend analítico) orquesten la creación de poblaciones, generación de contenido y simulaciones de feed bajo estrictas políticas de ética y cumplimiento.
+Azt3kNet is a research-oriented Python system that models networks of digital agents within a self-contained environment. All content and populations are generated locally through [Ollama](https://ollama.ai/) and programmatic prompts with deterministic seeds to ensure reproducibility, diversity, and the absence of PII. The platform exposes CLI and API interfaces so other teams (for example, an analytical frontend) can orchestrate population creation, content generation, and feed simulations under strict ethics and compliance policies.
 
-## 🚀 Capacidades clave
+## 🚀 Key Capabilities
 
-- **Generación de poblaciones sintéticas** a partir de especificaciones parametrizadas (género, ubicación, edad, intereses) transformadas en prompts estructurados para Ollama.
-- **Content Engine controlado** que produce borradores, captions, alt-text, hashtags y variaciones con metadatos explicativos y puntajes de cumplimiento.
-- **Simulador de feed** que orquesta publicaciones, comentarios, reacciones y cadenas conversacionales con un grafo de afinidades configurable.
-- **Compliance Guard siempre activo** que etiqueta o bloquea contenido riesgoso y audita cada decisión.
-- **Observabilidad integral** con logging estructurado, métricas Prometheus y trazas OpenTelemetry.
-- **Persistencia pluggable** (SQLite/Postgres) con migraciones Alembic y exportaciones JSON/CSV para frontends.
+- **Synthetic population generation** from parameterized specifications (gender, location, age, interests) transformed into structured prompts for Ollama.
+- **Controlled Content Engine** that produces drafts, captions, alt-text, hashtags, and variations with explanatory metadata and compliance scores.
+- **Feed simulator** that orchestrates posts, comments, reactions, and conversation chains with a configurable affinity graph.
+- **Always-on Compliance Guard** that labels or blocks risky content and audits every decision.
+- **End-to-end observability** with structured logging, Prometheus metrics, and OpenTelemetry traces.
+- **Pluggable persistence** (SQLite/Postgres) with Alembic migrations and JSON/CSV exports for frontends.
 
-## 📁 Disposición del repositorio
+## 📁 Repository Layout
 
 ```
 .
 ├── README.md
 ├── docs/
-│   ├── ARCHITECTURE.md         # Profundiza en la arquitectura propuesta
-│   ├── ADRs/                   # Registros de decisiones de arquitectura
-│   └── diagrams/               # Diagramas de componentes/flujo
+│   ├── ARCHITECTURE.md         # Deep dive into the proposed architecture
+│   ├── ADRs/                   # Architecture decision records
+│   └── diagrams/               # Component/flow diagrams
 ├── infra/
-│   ├── docker/                 # Dockerfiles, docker-compose y scripts de entorno
-│   ├── migrations/             # Entorno Alembic + versiones
-│   └── observability/          # Configuración Prometheus/OTel
-├── scripts/                    # Utilidades de bootstrap y herramientas dev
+│   ├── docker/                 # Dockerfiles, docker-compose, and environment scripts
+│   ├── migrations/             # Alembic environment + versions
+│   └── observability/          # Prometheus/OTel configuration
+├── scripts/                    # Bootstrap utilities and developer tools
 ├── src/azt3knet/
 │   ├── __init__.py
-│   ├── adapters/               # Mocks de plataformas externas
-│   ├── agent_factory/          # Generación y exportación de agentes
-│   ├── api/                    # FastAPI routers y dependencias
-│   ├── cli/                    # Interfaz Typer `azt3knet`
-│   ├── compliance_guard/       # Reglas, clasificadores y auditoría
-│   ├── content_engine/         # Plantillas y pipeline de contenido
-│   ├── core/                   # Config, logging, métricas, trazas, prompts
-│   ├── infra/                  # Settings, secrets, proveedores de colas
-│   ├── orchestrator/           # Coordinación de workflows y afinidades
+│   ├── adapters/               # Mocks of external platforms
+│   ├── agent_factory/          # Agent generation and export
+│   ├── api/                    # FastAPI routers and dependencies
+│   ├── cli/                    # Typer interface `azt3knet`
+│   ├── compliance_guard/       # Rules, classifiers, and auditing
+│   ├── content_engine/         # Templates and content pipeline
+│   ├── core/                   # Config, logging, metrics, traces, prompts
+│   ├── infra/                  # Settings, secrets, queue providers
+│   ├── orchestrator/           # Workflow coordination and affinities
 │   ├── scheduler/              # Job runner/queue (Arq/Celery)
-│   ├── simulation/             # Motor de feed y reportes
-│   └── storage/                # SQLAlchemy, repositorios, UoW
+│   ├── simulation/             # Feed engine and reports
+│   └── storage/                # SQLAlchemy, repositories, UoW
 └── tests/
     ├── unit/
     ├── integration/
@@ -48,25 +48,25 @@ Azt3kNet es un sistema Python orientado a investigación que modela redes de age
     └── golden/
 ```
 
-## 🧠 Componentes principales
+## 🧠 Core Components
 
-| Módulo | Rol | Destacados |
+| Module | Role | Highlights |
 |--------|-----|------------|
-| `core` | Configuración centralizada, seeds deterministas, utilidades de observabilidad y plantillas de prompts | `pydantic-settings`, `structlog`, `opentelemetry`, `prometheus_client` |
-| `agent_factory` | Normaliza especificaciones, genera agentes vía Ollama y maneja persistencia/exportación | Pydantic schemas (`AgentProfile`), validación de diversidad, fixtures JSON/CSV |
-| `content_engine` | Orquesta plantillas + contexto de agente para producir borradores y variaciones con metadatos y `compliance_score` | Cliente Ollama asincrónico, pipeline basado en seeds |
-| `scheduler` | Gestión de trabajos de fondo (`population`, `content`, `simulation`) con reintentos, rate limiting y monitoreo | `Arq`/`Celery`, `asyncio.TaskGroup` |
-| `orchestrator` | Coordina quién publica, cuándo y con qué afinidades; integra compliance y storage | Grafo de afinidades, eventos de simulación |
-| `simulation` | Motor de feed que emite publicaciones, comentarios, likes y reply chains reproducibles | Métricas de escenarios, reportes de auditoría |
-| `compliance_guard` | Aplica reglas de seguridad, clasifica riesgos y documenta decisiones | Reglas declarativas, heurísticas locales, auditoría persistida |
-| `storage` | Capa de persistencia con SQLAlchemy 2.0, migraciones Alembic, repositorios y UoW | SQLite/Postgres, registros de jobs/agents/content |
-| `api` | Superficie FastAPI con endpoints equivalentes al CLI y exposición de métricas | Routers `population`, `content`, `simulation`, `jobs`, `health` |
-| `cli` | Comandos Typer `azt3knet` que reproducen todos los flujos principales | Flags coherentes con la API |
-| `adapters` | Stubs/mocks de feeds sociales y mensajería para conectar frontends sin tocar servicios reales | Contratos documentados |
+| `core` | Centralized configuration, deterministic seeds, observability utilities, and prompt templates | `pydantic-settings`, `structlog`, `opentelemetry`, `prometheus_client` |
+| `agent_factory` | Normalizes specifications, generates agents via Ollama, and handles persistence/export | Pydantic schemas (`AgentProfile`), diversity validation, JSON/CSV fixtures |
+| `content_engine` | Orchestrates templates + agent context to produce drafts and variations with metadata and `compliance_score` | Asynchronous Ollama client, seed-based pipeline |
+| `scheduler` | Background job management (`population`, `content`, `simulation`) with retries, rate limiting, and monitoring | `Arq`/`Celery`, `asyncio.TaskGroup` |
+| `orchestrator` | Coordinates who posts, when, and with what affinities; integrates compliance and storage | Affinity graph, simulation events |
+| `simulation` | Feed engine emitting posts, comments, likes, and reproducible reply chains | Scenario metrics, audit reports |
+| `compliance_guard` | Applies safety rules, classifies risks, and documents decisions | Declarative rules, local heuristics, persisted auditing |
+| `storage` | Persistence layer with SQLAlchemy 2.0, Alembic migrations, repositories, and UoW | SQLite/Postgres, job/agent/content records |
+| `api` | FastAPI surface mirroring the CLI and exposing metrics | `population`, `content`, `simulation`, `jobs`, `health` routers |
+| `cli` | Typer commands `azt3knet` covering every main flow | Flags aligned with the API |
+| `adapters` | Social feed and messaging stubs/mocks that let frontends connect without touching real services | Documented contracts |
 
-## 🧾 Esquema de agentes sintéticos
+## 🧾 Synthetic Agent Schema
 
-Cada respuesta de Ollama debe entregar exactamente **N** registros únicos con el siguiente schema Pydantic:
+Every Ollama response must return exactly **N** unique records following this Pydantic schema:
 
 ```python
 class AgentProfile(BaseModel):
@@ -87,13 +87,13 @@ class AgentProfile(BaseModel):
     behavioral_biases: List[str]
 ```
 
-- `seed` deriva determinísticamente de la especificación de población y el índice del agente.
-- `interests`, `bio` y `behavioral_biases` excluyen PII y referencias a cuentas reales.
-- `agent_factory` valida unicidad de `username_hint`, diversidad de género/intereses y consistencia geográfica.
+- `seed` derives deterministically from the population specification and the agent index.
+- `interests`, `bio`, and `behavioral_biases` exclude PII and references to real accounts.
+- `agent_factory` validates `username_hint` uniqueness, gender/interest diversity, and geographic consistency.
 
-## 📊 Especificación de población
+## 📊 Population Specification
 
-Las poblaciones se definen mediante CLI o API utilizando los mismos parámetros. Ejemplo en CLI:
+Populations are defined via CLI or API using the same parameters. CLI example:
 
 ```bash
 azt3knet populate \
@@ -107,7 +107,7 @@ azt3knet populate \
   --preview 10
 ```
 
-Equivalente en API:
+API equivalent:
 
 ```http
 POST /api/populate
@@ -123,85 +123,85 @@ POST /api/populate
 }
 ```
 
-| Campo | Tipo | Requerido | Descripción |
+| Field | Type | Required | Description |
 |-------|------|-----------|-------------|
-| `gender` | `female` \| `male` \| `non_binary` \| `unspecified` | Sí | Filtro de género base. |
-| `count` | entero > 0 | Sí | Número de agentes a generar. |
-| `country` | ISO 3166-1 alfa-2 | Sí | País de residencia simulado. |
-| `city` | texto | Opcional | Ciudad específica (usa seeds compuestas). |
-| `age_range` | `[min, max]` | Opcional | Ambos límites inclusive, 13 ≤ edad ≤ 90. |
-| `interests` | lista de strings | Opcional | Debe contener ≥ 1 interés si se envía. |
-| `seed` | string | Opcional | Determina reproducibilidad; se autogenera si falta. |
-| `preview` | entero | Opcional | Muestra N registros sin persistir. |
-| `persist` | bool | Opcional | Si `true`, guarda en storage y retorna `job_id`. |
+| `gender` | `female` \| `male` \| `non_binary` \| `unspecified` | Yes | Base gender filter. |
+| `count` | integer > 0 | Yes | Number of agents to generate. |
+| `country` | ISO 3166-1 alpha-2 | Yes | Simulated country of residence. |
+| `city` | text | Optional | Specific city (uses composite seeds). |
+| `age_range` | `[min, max]` | Optional | Both bounds inclusive, 13 ≤ age ≤ 90. |
+| `interests` | list of strings | Optional | Must contain ≥ 1 interest if provided. |
+| `seed` | string | Optional | Drives reproducibility; auto-generated if missing. |
+| `preview` | integer | Optional | Shows N records without persisting. |
+| `persist` | bool | Optional | If `true`, saves to storage and returns a `job_id`. |
 
-Las especificaciones se transforman en prompts programáticos y precisos para Ollama, exigiendo N registros únicos que respeten el schema anterior y las políticas de compliance.
+Specifications are transformed into programmatic, precise prompts for Ollama that demand N unique records adhering to the schema above and compliance policies.
 
-## 🔁 Flujos CLI y API
+## 🔁 CLI and API Flows
 
-| Acción | CLI | API | Resultado |
-|--------|-----|-----|-----------|
-| Generar población | `azt3knet populate ...` | `POST /api/populate` | Ejecuta job en cola `population`, opcionalmente previewa y/o persiste. |
-| Exportar fixtures | `azt3knet populate ... --persist --export json --path data/fixtures/mx.json` | `POST /api/populate?export=json` | Genera fixtures JSON/CSV para frontends. |
-| Crear contenido | `azt3knet content draft --agent <uuid> --template street_art_campaign` | `POST /api/content/draft` | Devuelve borradores, captions, alt-text, hashtags, variaciones + metadata y `compliance_score`. |
-| Correr simulación | `azt3knet sim run --scenario metro_cdmx --ticks 120` | `POST /api/simulations/{scenario}/run` | Encola job que simula feed, expone métricas y reportes. |
-| Estado de jobs | `azt3knet jobs status <id>` | `GET /api/jobs/{id}` | Retorna estado (`queued`, `running`, `failed`, `completed`) y metadatos. |
-| Salud/observabilidad | `azt3knet system check` | `GET /healthz`, `GET /metrics` | Healthcheck + métricas Prometheus. |
+| Action | CLI | API | Outcome |
+|--------|-----|-----|---------|
+| Generate population | `azt3knet populate ...` | `POST /api/populate` | Enqueues a job in the `population` queue, optionally previews and/or persists. |
+| Export fixtures | `azt3knet populate ... --persist --export json --path data/fixtures/mx.json` | `POST /api/populate?export=json` | Produces JSON/CSV fixtures for frontends. |
+| Create content | `azt3knet content draft --agent <uuid> --template street_art_campaign` | `POST /api/content/draft` | Returns drafts, captions, alt-text, hashtags, variations + metadata and `compliance_score`. |
+| Run simulation | `azt3knet sim run --scenario metro_cdmx --ticks 120` | `POST /api/simulations/{scenario}/run` | Enqueues a feed simulation job, exposes metrics and reports. |
+| Job status | `azt3knet jobs status <id>` | `GET /api/jobs/{id}` | Returns status (`queued`, `running`, `failed`, `completed`) and metadata. |
+| Health/observability | `azt3knet system check` | `GET /healthz`, `GET /metrics` | Healthcheck + Prometheus metrics. |
 
-Todos los comandos aceptan `--seed` global para reproducibilidad. La API devuelve `job_id` y enlaces a exportaciones cuando aplica.
+All commands accept a global `--seed` for reproducibility. The API returns a `job_id` and links to exports when applicable.
 
-## ⚙️ Trabajo en segundo plano y observabilidad
+## ⚙️ Background Work and Observability
 
-- **Job runner/queue:** `scheduler` encapsula Arq (preferido) o Celery con Redis. Las colas separadas (`population`, `content`, `simulation`) permiten aislar cargas.
-- **Logging estructurado:** JSON con campos `job_id`, `agent_id`, `seed`, `scenario`. Integración con `core.logging`.
-- **Métricas Prometheus:** tiempos de generación, tasa de reintentos, tamaños de población, ratio de cumplimiento, eventos por escenario.
-- **Trazas OpenTelemetry:** spans para CLI/API, workers, llamadas a Ollama y almacenamiento. Configurables vía `core.tracing`.
+- **Job runner/queue:** `scheduler` encapsulates Arq (preferred) or Celery with Redis. Separate queues (`population`, `content`, `simulation`) isolate workloads.
+- **Structured logging:** JSON with fields `job_id`, `agent_id`, `seed`, `scenario`. Integration with `core.logging`.
+- **Prometheus metrics:** generation times, retry rate, population sizes, compliance ratios, events per scenario.
+- **OpenTelemetry traces:** spans for CLI/API, workers, Ollama calls, and storage. Configurable through `core.tracing`.
 
-## 🗄️ Persistencia y migraciones
+## 🗄️ Persistence and Migrations
 
-- **Storage pluggable:** SQLite para desarrollo rápido; Postgres recomendado para pruebas integradas.
-- **Alembic:** migraciones viven en `infra/migrations`, ejecutables desde CLI (`azt3knet db upgrade`).
-- **Repositorios y UoW:** `storage.repositories` y `storage.unit_of_work` aíslan transacciones y facilitan pruebas.
-- **Exportaciones:** `agent_factory.export` produce JSON/CSV deterministas listos para frontends o análisis offline.
+- **Pluggable storage:** SQLite for rapid development; Postgres recommended for integrated testing.
+- **Alembic:** migrations live in `infra/migrations`, runnable from the CLI (`azt3knet db upgrade`).
+- **Repositories and UoW:** `storage.repositories` and `storage.unit_of_work` isolate transactions and simplify testing.
+- **Exports:** `agent_factory.export` produces deterministic JSON/CSV ready for frontends or offline analysis.
 
-## 🧪 Estrategia de pruebas
+## 🧪 Testing Strategy
 
-- **Unitarias:** validación de schemas Pydantic, formato de prompts, seeds deterministas, reglas de compliance.
-- **Integración:** pipelines end-to-end mockeando Ollama con fixtures golden y levantando Redis/Postgres vía Docker.
-- **Golden tests:** snapshots de poblaciones/contenidos para semillas conocidas (`tests/golden`) garantizan estabilidad.
-- **Simulación:** escenarios reproducibles verifican métricas de afinidad y actividad. Las cadenas de respuesta se comparan contra fixtures.
-- **Compliance:** inyecta contenido adverso y confirma que `ComplianceGuard` bloquea, etiqueta y audita correctamente.
+- **Unit tests:** validate Pydantic schemas, prompt formatting, deterministic seeds, compliance rules.
+- **Integration tests:** end-to-end pipelines mocking Ollama with golden fixtures and spinning up Redis/Postgres via Docker.
+- **Golden tests:** snapshots of populations/content for known seeds (`tests/golden`) guarantee stability.
+- **Simulation tests:** reproducible scenarios verify affinity and activity metrics. Reply chains are compared against fixtures.
+- **Compliance tests:** inject adversarial content and confirm that `ComplianceGuard` blocks, labels, and audits correctly.
 
-Ejemplo de comando de pruebas:
+Example test command:
 
 ```bash
 poetry run pytest
 ```
 
-## 🧯 Políticas éticas y de cumplimiento
+## 🧯 Ethics and Compliance Policies
 
-1. **Datos sintéticos únicamente.** Ningún agente representa personas reales y se prohíbe importar PII.
-2. **Sin automatización externa.** Los adaptadores son mocks; no se conectan a APIs reales ni automatizan redes sociales.
-3. **Transparencia y trazabilidad.** Cada generación registra `seed`, prompts usados, decisiones de compliance y métricas.
-4. **Moderación proactiva.** Contenido riesgoso se bloquea o etiqueta y nunca se publica sin revisión explícita.
-5. **Uso responsable de LLMs.** Ollama se ejecuta localmente; se documentan versiones de modelos y parámetros utilizados.
+1. **Synthetic data only.** No agent represents real people and importing PII is prohibited.
+2. **No external automation.** Adapters are mocks; they never connect to real APIs or automate social networks.
+3. **Transparency and traceability.** Every generation records the `seed`, prompts used, compliance decisions, and metrics.
+4. **Proactive moderation.** Risky content is blocked or labeled and never published without explicit review.
+5. **Responsible LLM usage.** Ollama runs locally; model versions and parameters are documented.
 
-## 🔧 Puesta en marcha (resumen)
+## 🔧 Getting Started (Summary)
 
-1. Instalar [Ollama](https://ollama.ai/) y descargar el modelo requerido (`ollama pull <modelo>`).
-2. Configurar entorno Python (p. ej., `poetry install`).
-3. Arrancar servicios auxiliares (Redis/Postgres) con `docker-compose up` dentro de `infra/docker/`.
-4. Ejecutar migraciones (`azt3knet db upgrade`).
-5. Levantar API (`poetry run uvicorn azt3knet.api.main:app --reload`) y worker (`poetry run azt3knet worker`).
-6. Consumir CLI/API según los flujos anteriores.
+1. Install [Ollama](https://ollama.ai/) and download the required model (`ollama pull <model>`).
+2. Set up the Python environment (e.g., `poetry install`).
+3. Start auxiliary services (Redis/Postgres) with `docker-compose up` inside `infra/docker/`.
+4. Run migrations (`azt3knet db upgrade`).
+5. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
+6. Use the CLI/API according to the flows above.
 
-## 🤝 Contribución
+## 🤝 Contributing
 
-- Sigue las convenciones de linting y type checking (`ruff`, `mypy`).
-- Agrega/actualiza pruebas, especialmente golden tests cuando cambien prompts o plantillas.
-- Documenta nuevas decisiones en `docs/ADRs/`.
-- Toda contribución debe mantener la premisa central: simulación local, datos sintéticos, cumplimiento estricto.
+- Follow linting and type-checking conventions (`ruff`, `mypy`).
+- Add/update tests, especially golden tests when prompts or templates change.
+- Document new decisions in `docs/ADRs/`.
+- Every contribution must uphold the core premise: local simulation, synthetic data, strict compliance.
 
 ---
 
-Azt3kNet ofrece un laboratorio seguro para experimentar con redes de agentes digitales. Gracias a seeds deterministas, observabilidad integral y cumplimiento transparente, el sistema permite iterar de forma responsable sin acercarse a la automatización de cuentas reales.
+Azt3kNet offers a safe laboratory for experimenting with networks of digital agents. Thanks to deterministic seeds, comprehensive observability, and transparent compliance, the system enables responsible iteration without approaching real-account automation.
