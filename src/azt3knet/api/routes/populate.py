@@ -12,12 +12,17 @@ router = APIRouter(tags=["population"])
 
 
 @router.post("/populate")
-async def populate_population(spec: PopulationSpec) -> dict[str, object]:
+async def populate_population(payload: dict[str, object]) -> dict[str, object]:
     """Generate a deterministic population.
 
     For the first sprint the endpoint returns the generated agents directly.
     Subsequent iterations will enqueue background jobs and persist results.
     """
+
+    try:
+        spec = PopulationSpec.from_dict(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     settings = get_settings()
     preview = spec.preview

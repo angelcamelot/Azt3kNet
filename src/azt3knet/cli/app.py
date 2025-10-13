@@ -1,12 +1,12 @@
 """Typer CLI entrypoint for Azt3kNet."""
 
 import json
-from typing import Optional
+from typing import Optional, get_args
 
 import typer
 
 from ..agent_factory.generator import generate_agents
-from ..agent_factory.models import PopulationSpec
+from ..agent_factory.models import Gender, PopulationSpec
 from ..core.config import get_settings, resolve_seed
 from ..core.logging import configure_logging
 
@@ -27,9 +27,15 @@ def main() -> None:  # pragma: no cover - Typer handles invocation
     configure_logging()
 
 
+_GENDER_VALUES = tuple(get_args(Gender))
+
+
 @app.command()
 def populate(
-    gender: Optional[str] = typer.Option(None, help="Gender filter for the population."),
+    gender: Optional[str] = typer.Option(
+        None,
+        help="Gender filter for the population.",
+    ),
     count: int = typer.Option(..., min=1, help="Number of agents to generate."),
     country: str = typer.Option(..., help="ISO country code."),
     city: Optional[str] = typer.Option(None, help="Optional city for context."),
@@ -53,6 +59,10 @@ def populate(
             raise typer.BadParameter("age must follow the 'min-max' format") from exc
     else:
         age_range = None
+
+    if gender is not None and gender not in _GENDER_VALUES:
+        allowed = ", ".join(_GENDER_VALUES)
+        raise typer.BadParameter(f"Invalid value for '--gender'. Choose from: {allowed}")
 
     interests_list = interests.split(",") if interests else None
     spec = PopulationSpec(
