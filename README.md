@@ -178,6 +178,78 @@ Example test command:
 poetry run pytest
 ```
 
+## 🔐 Environment configuration
+
+All services read configuration from a `.env` file located at the repository
+root. Copy `.env.example` to `.env` and fill in any secrets before running the
+stack. The tables below document every variable that the application consumes.
+
+### Core runtime
+
+| Variable | Description |
+| --- | --- |
+| `AZT3KNET_ENVIRONMENT` | `development`, `staging` or `production` flag that tunes logging and defaults. |
+| `AZT3KNET_LOG_LEVEL` | Structured log level (`INFO`, `DEBUG`, etc.). |
+| `AZT3KNET_DEFAULT_SEED` | Seed value used when no explicit seed is provided to jobs. |
+| `AZT3KNET_TIMEZONE` | Default timezone for scheduling. |
+| `AZT3KNET_PREVIEW_LIMIT` | Maximum records returned by preview endpoints/CLI. |
+| `API_HOST` / `API_PORT` | Bind address and port for the FastAPI service. |
+
+### Storage and queues
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_BACKEND` | Selects `postgres` or `sqlite` adapter. |
+| `DATABASE_URL` | SQLAlchemy URL for the primary database (contains credentials). |
+| `SQLITE_URL` | Local fallback database connection string. |
+| `ALEMBIC_CONFIG` | Relative path to the Alembic configuration file. |
+| `REDIS_URL` | Redis connection URL used by workers and background jobs. |
+| `QUEUE_POPULATION` / `QUEUE_CONTENT` / `QUEUE_SIMULATION` | Queue names consumed by the scheduler. |
+
+### Observability and feature flags
+
+| Variable | Description |
+| --- | --- |
+| `PROMETHEUS_PORT` | Port where Prometheus metrics are exposed. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint for traces/metrics. |
+| `OTEL_SERVICE_NAME` | Service name reported to OpenTelemetry. |
+| `AZT3KNET_COMPLIANCE_ENABLED` | Toggles the compliance guard pipeline. |
+| `ENABLE_METRICS` / `ENABLE_TRACING` | Enable or disable metrics and tracing exporters. |
+
+### Ollama model access
+
+| Variable | Description |
+| --- | --- |
+| `OLLAMA_BASE_URL` | Base URL of the Ollama instance (must be reachable from workers). |
+| `OLLAMA_MODEL` | Default Ollama model tag used for generations. |
+| `OLLAMA_TIMEOUT` | Request timeout (seconds) for Ollama calls. |
+
+### Mail automation (Mailcow + deSEC)
+
+| Variable | Description |
+| --- | --- |
+| `DESEC_API` | Base URL for the deSEC REST API. |
+| `DESEC_DOMAIN` | `dedyn.io` hostname managed through deSEC. |
+| `DESEC_TOKEN` | API token with RRset and DynDNS scopes (**secret**). |
+| `DESEC_DYNDNS_UPDATE_URL` | Endpoint used for periodic DynDNS refreshes. |
+| `DESEC_UPDATE_INTERVAL_HOURS` | Interval between DynDNS updates. |
+| `MAILCOW_API` | Base URL for the Mailcow API. |
+| `MAILCOW_API_KEY` | Mailcow API key with domain/mailbox permissions (**secret**). |
+| `MAILCOW_SMTP_HOST` / `MAILCOW_SMTP_PORT` | SMTP endpoint exposed by Mailcow. |
+| `MAILCOW_IMAP_HOST` / `MAILCOW_IMAP_PORT` | IMAP endpoint exposed by Mailcow. |
+| `MAILCOW_RELAY_HOST` / `MAILCOW_RELAY_PORT` | Optional outbound SMTP relay configuration. |
+| `MAILCOW_RELAY_USER` / `MAILCOW_RELAY_PASS` | Credentials for the relay (**secret**, optional). |
+| `MAILCOW_VERIFY_TLS` | Enforce TLS certificate validation when connecting to Mailcow. |
+| `AZT3KNET_DOMAIN` | Base domain appended to generated agent mailboxes. |
+| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when constructing mailbox addresses. |
+| `AZT3KNET_MAIL_QUOTA_MB` | Mailbox quota (MiB) enforced during provisioning. |
+| `AZT3KNET_MAIL_TTL` | Default credential TTL when issuing temporary passwords. |
+| `AZT3KNET_MAIL_RATE_LIMIT` | Maximum outbound messages per agent mailbox. |
+
+The mail automation workflow—including concrete examples for provisioning
+mailboxes and syncing DNS—is documented in
+[`docs/mail-architecture.md`](docs/mail-architecture.md).
+
 ## 🧯 Ethics and Compliance Policies
 
 1. **Transparency and traceability.** Every generation records the `seed`, prompts used, compliance decisions, and metrics.

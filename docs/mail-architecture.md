@@ -53,6 +53,26 @@ wraps the REST API. It can:
 * optionally configure an outbound SMTP relay such as Sendgrid when direct port
   25 access is unavailable
 
+Minimal provisioning example:
+
+```python
+from azt3knet.core.mail_config import (
+    get_mail_provisioning_settings,
+    get_mailcow_settings,
+)
+from azt3knet.services.mailcow_provisioner import MailcowProvisioner
+
+with MailcowProvisioner(
+    mailcow=get_mailcow_settings(),
+    provisioning=get_mail_provisioning_settings(),
+) as provisioner:
+    creds = provisioner.create_agent_mailbox(
+        agent_id="123e4567-e89b-12d3-a456-426614174000",
+        display_name="Agent 427",
+    )
+    print(creds.address, creds.app_password)
+```
+
 ### DNS automation
 
 `DeSECDNSManager` automates RRset management and DynDNS updates via the deSEC
