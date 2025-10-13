@@ -63,10 +63,13 @@ def test_bootstrap_dns_happy_path(monkeypatch):
         path = request.url.path
         mail_requests.append((request.method, path))
         if request.method == "GET" and path.endswith("/get/domain/all"):
+            assert path == "/api/get/domain/all"
             return httpx.Response(200, json=[])
         if request.method == "POST" and path.endswith("/add/domain"):
+            assert path == "/api/add/domain"
             return httpx.Response(200, json={"status": "created"})
         if request.method == "GET" and path.endswith("/get/dkim/example.com"):
+            assert path == "/api/get/dkim/example.com"
             return httpx.Response(200, json={"public": "v=DKIM1"})
         raise AssertionError(f"Unexpected Mailcow request: {request.method} {request.url}")
 
@@ -93,14 +96,14 @@ def test_bootstrap_dns_happy_path(monkeypatch):
         dns_manager_factory=_make_dns_factory(dns_handler, dyn_handler),
     )
 
-    assert any(method == "GET" and path.endswith("/get/domain/all") for method, path in mail_requests)
-    assert any(method == "POST" and path.endswith("/add/domain") for method, path in mail_requests)
-    assert any(method == "GET" and path.endswith("/get/dkim/example.com") for method, path in mail_requests)
+    assert any(method == "GET" and path == "/api/get/domain/all" for method, path in mail_requests)
+    assert any(method == "POST" and path == "/api/add/domain" for method, path in mail_requests)
+    assert any(method == "GET" and path == "/api/get/dkim/example.com" for method, path in mail_requests)
 
     assert len(dns_requests) == 1
     method, path, body = dns_requests[0]
     assert method == "PATCH"
-    assert path.endswith("/domains/example.com/rrsets/")
+    assert path == "/api/v1/domains/example.com/rrsets/"
     assert isinstance(body, list)
     rr_counter = Counter(item["type"] for item in body)
     assert rr_counter["MX"] == 1

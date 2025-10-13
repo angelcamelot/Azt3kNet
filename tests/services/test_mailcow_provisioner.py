@@ -41,10 +41,12 @@ def test_create_agent_mailbox_issues_expected_requests(
         json_payload = json.loads(request.content.decode()) if request.content else {}
         calls.append((request.url.path, json_payload))
         if request.url.path.endswith("/add/mailbox"):
+            assert request.url.path == "/api/v1/add/mailbox"
             assert json_payload["local_part"] == "agent_alpha"
             assert json_payload["rl_value"] == 100
             return httpx.Response(200, json={"status": "success"})
         if request.url.path.endswith("/add/app-passwd"):
+            assert request.url.path == "/api/v1/add/app-passwd"
             return httpx.Response(200, json={"password": "app-secret"})
         raise AssertionError(f"Unexpected request to {request.url}")
 
@@ -58,8 +60,8 @@ def test_create_agent_mailbox_issues_expected_requests(
 
     assert credentials.address == "agent_alpha@example.com"
     assert credentials.app_password == "app-secret"
-    assert calls[0][0].endswith("/add/mailbox")
-    assert calls[1][0].endswith("/add/app-passwd")
+    assert calls[0][0] == "/api/v1/add/mailbox"
+    assert calls[1][0] == "/api/v1/add/app-passwd"
 
 
 def test_create_agent_mailbox_preserves_falsy_values(
@@ -70,9 +72,11 @@ def test_create_agent_mailbox_preserves_falsy_values(
     def handler(request: httpx.Request) -> httpx.Response:
         json_payload = json.loads(request.content.decode()) if request.content else {}
         if request.url.path.endswith("/add/mailbox"):
+            assert request.url.path == "/api/v1/add/mailbox"
             calls.append(json_payload)
             return httpx.Response(200, json={"status": "success"})
         if request.url.path.endswith("/add/app-passwd"):
+            assert request.url.path == "/api/v1/add/app-passwd"
             return httpx.Response(200, json={"password": "app-secret"})
         raise AssertionError(f"Unexpected request to {request.url}")
 
@@ -97,6 +101,7 @@ def test_get_dkim_key_handles_list_response(
     mailcow_settings: MailcowSettings, provisioning_settings: MailProvisioningSettings
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/get/dkim/example.com"
         return httpx.Response(200, json=[{"public": "v=DKIM1; p=abc"}])
 
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url=mailcow_settings.base_url)
@@ -110,6 +115,7 @@ def test_create_app_password_raises_when_missing(
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/add/app-passwd"):
+            assert request.url.path == "/api/v1/add/app-passwd"
             return httpx.Response(200, json={})
         return httpx.Response(200, json={})
 

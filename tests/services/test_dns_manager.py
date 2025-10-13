@@ -32,7 +32,7 @@ def test_bootstrap_mail_records_uses_bulk_upsert(monkeypatch) -> None:
     dns.bootstrap_mail_records(mail_host="mail.example.com", public_ip="1.2.3.4", dkim_key="v=DKIM1", ttl=300)
 
     assert captured["method"] == "PATCH"
-    assert captured["path"].endswith("/rrsets/")
+    assert captured["path"] == "/api/v1/domains/example.com/rrsets/"
     payload = captured["json"]
     assert isinstance(payload, list)
     assert len(payload) == 5

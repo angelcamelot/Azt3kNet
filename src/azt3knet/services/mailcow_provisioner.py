@@ -74,7 +74,10 @@ class MailcowProvisioner:
     # API helpers
     # ------------------------------------------------------------------
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        response = self._client.request(method, path, **kwargs)
+        request_path = path
+        if not httpx.URL(path).is_absolute_url:
+            request_path = path.lstrip("/")
+        response = self._client.request(method, request_path, **kwargs)
         response.raise_for_status()
         return response
 
