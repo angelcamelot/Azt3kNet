@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: azt3knet-api
+    static_configs:
+      - targets:
+          - "localhost:8000"
+        labels:
+          service: api
+  - job_name: azt3knet-worker
+    static_configs:
+      - targets:
+          - "localhost:9000"
+        labels:
+          service: worker
