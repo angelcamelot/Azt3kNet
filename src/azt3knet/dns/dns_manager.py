@@ -1,13 +1,4 @@
-"""Cliente de deSEC para operaciones DNS.
-
-La implementación final gestionará:
-- Creación/actualización de RRsets (TXT, MX, A, SPF, DMARC, DKIM).
-- Gestión de errores/reintentos con backoff.
-- Coordinación con configuración de Mailcow (DKIM).
-
-Este stub define las interfaces esperadas para ser utilizadas por los módulos de
-bootstrap y provisión de buzones.
-"""
+"""Helpers for managing DNS records via the deSEC API."""
 
 from __future__ import annotations
 
@@ -17,7 +8,7 @@ from typing import Iterable, Protocol
 
 @dataclass
 class RRSet:
-    """Representación mínima de un RRset de deSEC."""
+    """Minimal representation of a deSEC RRset."""
 
     name: str
     rtype: str
@@ -26,29 +17,36 @@ class RRSet:
 
 
 class DNSManager(Protocol):
-    """Contrato para gestores DNS."""
+    """Contract that DNS manager implementations must follow."""
 
-    async def upsert_rrset(self, name: str, rtype: str, records: Iterable[str], *, ttl: int = 3600) -> None:
-        """Crea o actualiza un RRset en deSEC."""
+    async def upsert_rrset(
+        self, name: str, rtype: str, records: Iterable[str], *, ttl: int = 3600
+    ) -> None:
+        """Create or update an RRset in deSEC."""
 
     async def delete_rrset(self, name: str, rtype: str) -> None:
-        """Elimina un RRset si existe."""
+        """Delete an RRset if it exists."""
 
 
 class DeSECDNSManager:
-    """Implementación concreta (pendiente)."""
+    """Concrete implementation placeholder."""
 
     def __init__(self, *, api_base: str, token: str, domain: str) -> None:
         self.api_base = api_base.rstrip("/")
         self.token = token
         self.domain = domain
 
-    async def upsert_rrset(self, name: str, rtype: str, records: Iterable[str], *, ttl: int = 3600) -> None:  # pragma: no cover - stub
-        """TODO: Implementar llamado HTTP PATCH a deSEC."""
+    async def upsert_rrset(
+        self, name: str, rtype: str, records: Iterable[str], *, ttl: int = 3600
+    ) -> None:  # pragma: no cover - stub
+        """TODO: Implement HTTP PATCH call to deSEC."""
 
         raise NotImplementedError
 
     async def delete_rrset(self, name: str, rtype: str) -> None:  # pragma: no cover - stub
-        """TODO: Implementar borrado de RRset."""
+        """TODO: Implement RRset deletion."""
 
         raise NotImplementedError
+
+
+__all__ = ["RRSet", "DNSManager", "DeSECDNSManager"]

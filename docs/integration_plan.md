@@ -1,63 +1,80 @@
-# Plan de integración Azt3kNet + deSEC + Mailcow
+# Azt3kNet + deSEC + Mailcow Integration Plan
 
-## Visión general
-Implementar una pipeline determinista para generar poblaciones sintéticas con identidad completa, buzón en Mailcow y DNS administrado via deSEC, accesible desde CLI y API.
+## Overview
 
-## Estrategia de commits
+Deliver a deterministic pipeline that generates synthetic populations with full
+digital identities, provisions Mailcow mailboxes, and manages DNS via deSEC.
+Both the CLI and API should expose the flow end-to-end.
 
-1. **Scaffold inicial y configuración de entorno**
-   - Actualizar `pyproject.toml`/dependencias necesarias (pydantic, httpx, cryptography, typer, etc.).
-   - Añadir `.env.example` con nuevas variables requeridas y documentación resumida.
-   - Crear estructura base en `src/azt3knet/` para módulos: `cli/`, `api/`, `services/`, `adapters/`.
-   - Añadir `docker-compose.mail.yml` con Mailcow y contenedor `azt3knet-dns-bootstrap` + scripts de arranque.
+## Commit strategy
 
-2. **Bootstrap DNS y actualización dinámica**
-   - Implementar `infra/dns_bootstrap.py` y `infra/dyn_updater.py` con cliente deSEC (`dns_manager.py`).
-   - Añadir configuración de cron o systemd-lite en contenedor para ejecutar `dyn_updater` con intervalo.
-   - Tests unitarios para `dns_manager` usando `pytest` con `responses`.
+1. **Environment scaffolding**
+   - Update `pyproject.toml` with the required dependencies (`pydantic`,
+     `httpx`, `cryptography`, `typer`, etc.).
+   - Add `.env.example` including the new secrets and summarize them in the
+     README.
+   - Create the initial structure under `src/azt3knet/` for `cli/`, `api/`,
+     `services/`, and `adapters/`.
+   - Add `docker-compose.mail.yml` with Mailcow and the `azt3knet-dns-bootstrap`
+     container plus startup scripts.
 
-3. **Adaptador LLM y modelos canónicos**
-   - Implementar `src/azt3knet/llm/adapter.py` con `generate_field` (incluye seeds deterministas).
-   - Consolidar `PopulationSpec` y `AgentProfile` en `src/azt3knet/agent_factory/models.py` para evitar duplicados.
-   - Mock tests para comprobar prompts y determinismo.
+2. **DNS bootstrap and dynamic updates**
+   - Implement `infra/dns_bootstrap.py` and `infra/dyn_updater.py` using the
+     `dns_manager.py` client for deSEC.
+   - Add cron/systemd-lite configuration to run `dyn_updater` on a schedule.
+   - Write unit tests for `dns_manager` with `pytest` + `responses`.
 
-4. **CLI populate (modo preview)**
-   - Añadir comando `azt3knet populate` en `src/azt3knet/cli/populate.py` con flags (`--gender`, `--count`, etc.).
-   - Implementar `population_builder.py` que normaliza flags → `PopulationSpec` y usa LLM en preview sin persistencia.
-   - Agregar documentación en `docs/cli.md` con ejemplos.
+3. **LLM adapter and canonical models**
+   - Implement `src/azt3knet/llm/adapter.py` with the deterministic
+     `generate_field` helper.
+   - Consolidate `PopulationSpec` and `AgentProfile` in
+     `src/azt3knet/agent_factory/models.py` to avoid duplicates.
+   - Add mock-based tests to validate prompts and determinism.
 
-5. **Provisionamiento de buzones y persistencia**
-   - Implementar `src/azt3knet/services/mailcow_provisioner.py` con llamadas POST `/api/v1/add/mailbox`, retries/backoff y manejo de conflictos.
-   - Integrar cifrado de contraseñas con `SECRET_KEY_FOR_KV_ENC` (libsodium/fernet).
-   - Añadir repositorio DB (`sqlalchemy`/`asyncpg` o actual stack) con tablas `agent_mailbox`, `audit_log`, etc.
-   - Extender CLI/API para `--create-mailboxes` / `create_mailboxes`.
-   - Tests con mocks LLM + Mailcow + DB (incluyendo rollback).
+4. **CLI populate (preview mode)**
+   - Implement the `azt3knet populate` command in
+     `src/azt3knet/cli/populate.py` with flags (`--gender`, `--count`, etc.).
+   - Build `population_builder.py` to normalize flags into `PopulationSpec` and
+     use the LLM in preview mode without persistence.
+   - Document the flow in `docs/cli.md` with practical examples.
 
-6. **API REST y script de recreación**
-   - Añadir endpoint `POST /api/populate` con FastAPI (o framework actual) y seguridad admin.
-   - Implementar `recreate_from_seed(population_spec, seed)` que re-sincroniza buzones y DKIM.
-   - Registrar métricas/logs (audit log) y exportador seguro de credenciales.
-   - Tests de integración ligeros e instrucciones en docs.
+5. **Mailbox provisioning and persistence**
+   - Implement `src/azt3knet/services/mailcow_provisioner.py` using the Mailcow
+     API (`/api/v1/add/mailbox`) with retries/backoff and conflict handling.
+   - Integrate password encryption with `SECRET_KEY_FOR_KV_ENC`
+     (libsodium/fernet).
+   - Add a database repository (`sqlalchemy`/`asyncpg` or the chosen stack) with
+     tables `agent_mailbox`, `audit_log`, etc.
+   - Extend the CLI/API with `--create-mailboxes` / `create_mailboxes`.
+   - Write tests that mock the LLM + Mailcow + DB (including rollbacks).
 
-7. **Documentación y scripts finales**
-   - Actualizar `README.md` con guía de despliegue.
-   - Documentar flujos API/CLI, manejo de seeds y seguridad de credenciales.
-   - Añadir diagramas/plantillas en `docs/` si aplica.
+6. **REST API and recreation script**
+   - Add the `POST /api/populate` endpoint with FastAPI (or the current
+     framework) and administrative auth.
+   - Implement `recreate_from_seed(population_spec, seed)` to re-sync mailboxes
+     and DKIM records.
+   - Register metrics/logs (audit trail) and a secure credential exporter.
+   - Provide lightweight integration tests and documentation.
 
-## Archivos iniciales a crear
+7. **Documentation and final scripts**
+   - Update the README with deployment guidance.
+   - Document CLI/API flows, seed handling, and credential security.
+   - Add diagrams/templates under `docs/` where appropriate.
 
-- `docs/integration_plan.md` (este documento).
-- `infra/dns_bootstrap.py` (esqueleto inicial con TODOs).
-- `infra/dyn_updater.py` (esqueleto).
-- `src/azt3knet/dns/dns_manager.py` (clase placeholder con interfaces).
-- `src/azt3knet/llm/adapter.py` (función stub `generate_field`).
-- `src/azt3knet/agent_factory/models.py` (dataclasses compartidas para agentes).
+## Initial files to create
+
+- `docs/integration_plan.md` (this document).
+- `infra/dns_bootstrap.py` (initial skeleton with TODOs).
+- `infra/dyn_updater.py` (skeleton).
+- `src/azt3knet/dns/dns_manager.py` (placeholder class/interfaces).
+- `src/azt3knet/llm/adapter.py` (stub for `generate_field`).
+- `src/azt3knet/agent_factory/models.py` (shared dataclasses for agents).
 - `src/azt3knet/services/mailcow_provisioner.py` (interface + TODOs).
-- `src/azt3knet/population/builder.py` (función stub `build_population`).
-- `src/azt3knet/cli/populate.py` (CLI stub con Typer).
+- `src/azt3knet/population/builder.py` (stub for `build_population`).
+- `src/azt3knet/cli/populate.py` (Typer CLI stub).
 - `src/azt3knet/api/routes/populate.py` (FastAPI router stub).
-- `tests/test_population_preview.py` (test placeholder que marca TODO para mocks).
-- `tests/conftest.py` (fixtures básicos para futuras pruebas).
+- `tests/test_population_preview.py` (placeholder test with TODOs for mocks).
+- `tests/conftest.py` (basic fixtures for future tests).
 
-Cada archivo inicial incluirá docstrings y `TODO` indicando la funcionalidad por implementar en fases posteriores.
-
+Each scaffolded file should include docstrings and TODOs describing the planned
+functionality for later iterations.

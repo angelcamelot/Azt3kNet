@@ -1,19 +1,109 @@
-"""Herramientas para construir poblaciones sintéticas."""
+"""Helpers that orchestrate agent generation and optional mailbox provisioning."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable, List
+import logging
+import uuid
+from dataclasses import dataclass, field
+from typing import List
 
+from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
+from azt3knet.core.config import resolve_seed
+from azt3knet.core.mail_config import (
+    MailcowSettings,
+    MailProvisioningSettings,
+    get_mailcow_settings,
+    get_mail_provisioning_settings,
+)
+from azt3knet.core.seeds import SeedSequence
 from azt3knet.llm.adapter import LLMAdapter, LLMRequest
+from azt3knet.services.mailcow_provisioner import MailboxCredentials, MailcowProvisioner
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MailboxAssignment:
+    """Mapping between an agent and the credentials created for it."""
+
+    agent_id: uuid.UUID
+    address: str
+    password: str
+    smtp_host: str
+    smtp_port: int
+    imap_host: str
+    imap_port: int
+    app_password: str | None = None
+
+    @classmethod
+    def from_credentials(
+        cls, agent_id: uuid.UUID, credentials: MailboxCredentials
+    ) -> "MailboxAssignment":
+        return cls(
+            agent_id=agent_id,
+            address=credentials.address,
+            password=credentials.password,
+            smtp_host=credentials.smtp_host,
+            smtp_port=credentials.smtp_port,
+            imap_host=credentials.imap_host,
+            imap_port=credentials.imap_port,
+            app_password=credentials.app_password,
+        )
+
+    def as_public_dict(self) -> dict[str, object]:
+        """Return a serializable representation suitable for JSON output."""
+
+        return {
+            "agent_id": str(self.agent_id),
+            "address": self.address,
+            "password": self.password,
+            "app_password": self.app_password,
+            "smtp_host": self.smtp_host,
+            "smtp_port": self.smtp_port,
+            "imap_host": self.imap_host,
+            "imap_port": self.imap_port,
+        }
 
 
 @dataclass
 class PopulationPreview:
-    """Contenedor con el resultado de un modo preview."""
+    """Container with the generated agents and optional mailboxes."""
 
     agents: List[AgentProfile]
+    mailboxes: List[MailboxAssignment] = field(default_factory=list)
+
+
+def _sanitize_local_part(value: str, fallback: str, *, max_length: int = 32) -> str:
+    filtered = "".join(ch for ch in value.lower() if ch.isalnum())
+    if not filtered:
+        filtered = "".join(ch for ch in fallback.lower() if ch.isalnum())
+    if not filtered:
+        filtered = "agent"
+    return filtered[:max_length]
+
+
+def _provisioner_from_settings(
+    *, mailcow: MailcowSettings | None = None,
+    provisioning: MailProvisioningSettings | None = None,
+) -> MailcowProvisioner:
+    mailcow_settings = mailcow or get_mailcow_settings()
+    provisioning_settings = provisioning or get_mail_provisioning_settings()
+    if not mailcow_settings.api_base:
+        raise RuntimeError("MAILCOW_API is not configured; cannot provision mailboxes")
+    if not mailcow_settings.api_key:
+        raise RuntimeError("MAILCOW_API_KEY is not configured; cannot provision mailboxes")
+    if not provisioning_settings.domain:
+        raise RuntimeError("AZT3KNET_DOMAIN is not configured; cannot provision mailboxes")
+    return MailcowProvisioner(mailcow_settings, provisioning_settings)
+
+
+def _mailbox_identifier(
+    agent: AgentProfile, alias_source: str, sequence: SeedSequence, index: int
+) -> str:
+    alias = _sanitize_local_part(alias_source, agent.username_hint)
+    suffix = sequence.derive("mailbox", agent.seed, str(index)) % 10_000
+    return f"{alias}{suffix:04d}"
 
 
 def build_population(
@@ -22,10 +112,46 @@ def build_population(
     llm: LLMAdapter,
     deterministic_seed: int,
     create_mailboxes: bool = False,
-) -> Iterable[AgentProfile]:  # pragma: no cover - stub
-    """Construye una secuencia de agentes.
+    mail_provisioner: MailcowProvisioner | None = None,
+) -> PopulationPreview:
+    """Generate a deterministic population and optionally create mailboxes."""
 
-    TODO: Implementar generación determinista y orquestación Mailcow.
-    """
+    resolved_seed = resolve_seed(spec.seed)
+    numeric_seed = SeedSequence(f"{resolved_seed}:{deterministic_seed}")
 
-    raise NotImplementedError
+    agents = generate_agents(spec)
+    if spec.preview:
+        agents = agents[: spec.preview]
+
+    mailboxes: List[MailboxAssignment] = []
+    if create_mailboxes:
+        provisioner = mail_provisioner
+        should_close = False
+        if provisioner is None:
+            provisioner = _provisioner_from_settings()
+            should_close = True
+        try:
+            provisioner.ensure_domain()
+            for index, agent in enumerate(agents):
+                prompt = (
+                    f"Generate a lowercase alias (no spaces) for the mailbox of agent {agent.name} "
+                    f"located in {agent.country}."
+                )
+                alias_text = llm.generate_field(
+                    LLMRequest(prompt=prompt, seed=deterministic_seed + index, field_name="mailbox_alias")
+                )
+                identifier = _mailbox_identifier(agent, alias_text, numeric_seed, index)
+                credentials = provisioner.create_agent_mailbox(
+                    identifier,
+                    display_name=agent.name,
+                )
+                logger.debug("Provisioned mailbox %s for agent %s", credentials.address, agent.id)
+                mailboxes.append(MailboxAssignment.from_credentials(agent.id, credentials))
+        finally:
+            if should_close:
+                provisioner.close()
+
+    return PopulationPreview(agents=agents, mailboxes=mailboxes)
+
+
+__all__ = ["PopulationPreview", "MailboxAssignment", "build_population"]
