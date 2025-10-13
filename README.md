@@ -232,6 +232,13 @@ Uvicorn in reload mode, so code changes are reflected immediately.
 
    This command creates `.env` and `infra/docker/.env` from their respective templates.
 
+   The application inspects `AZT3KNET_ENVIRONMENT` and `AZT3KNET_COMPLIANCE_ENABLED` at startup. Override them in your shell or `.env` file to switch between environments or toggle compliance behavior:
+
+   ```bash
+   export AZT3KNET_ENVIRONMENT=staging
+   export AZT3KNET_COMPLIANCE_ENABLED=false
+   ```
+
 3. Set up the Python environment (e.g., `poetry install`).
 4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh postgres redis ollama`.
 5. Run migrations (`azt3knet db upgrade`).
