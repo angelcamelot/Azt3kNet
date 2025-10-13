@@ -196,9 +196,10 @@ class ResilientHTTPClient:
                     opened = self._breaker.record_failure()
                     if opened:
                         self.metrics.circuit_breaker_tripped += 1
-                    if attempt >= max_attempts:
-                        return response
+                    should_return = attempt >= max_attempts
                     response.close()
+                    if should_return:
+                        return response
                 else:
                     self.metrics.successful_requests += 1
                     self._breaker.record_success()
@@ -212,6 +213,8 @@ class ResilientHTTPClient:
         if last_exc is not None:
             raise last_exc
         assert response is not None  # for mypy, we either returned or have a response
+        if self._should_retry_response(response):
+            response.close()
         return response
 
 

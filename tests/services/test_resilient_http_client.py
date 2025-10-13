@@ -4,6 +4,7 @@ import itertools
 
 import httpx
 import pytest
+from unittest.mock import Mock
 
 from azt3knet.services.resilient_http_client import (
     CircuitBreaker,
@@ -100,3 +101,29 @@ def test_circuit_breaker_blocks_requests_until_recovered() -> None:
     recovered = resilient.request("GET", "/recover")
     assert recovered.status_code == 200
     assert breaker.state == "closed"
+
+
+def test_request_closes_response_on_retry() -> None:
+    retry_response = Mock(spec=httpx.Response)
+    retry_response.status_code = 500
+    retry_response.close = Mock()
+
+    success_response = Mock(spec=httpx.Response)
+    success_response.status_code = 200
+    success_response.close = Mock()
+
+    client = Mock(spec=httpx.Client)
+    client.request = Mock(side_effect=[retry_response, success_response])
+
+    resilient = ResilientHTTPClient(
+        client,
+        service_name="test-service",
+        retry_config=RetryConfiguration(max_retries=1),
+        sleep=lambda _: None,
+    )
+
+    response = resilient.request("GET", "https://example.com")
+
+    assert response is success_response
+    retry_response.close.assert_called_once()
+    success_response.close.assert_not_called()
