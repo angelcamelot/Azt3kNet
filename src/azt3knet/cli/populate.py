@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Optional
 
 import typer
 
-from azt3knet.models.agent import PopulationSpec
+from azt3knet.agent_factory.models import PopulationSpec
 
 app = typer.Typer(help="Herramientas de población Azt3kNet")
 
@@ -20,7 +21,7 @@ def populate(
     city: Optional[str] = typer.Option(None, help="Ciudad preferida"),
     age_range: Optional[str] = typer.Option(None, help="Rango de edad ej. 18-30"),
     interests: Optional[str] = typer.Option(None, help="Lista separada por comas"),
-    seed: Optional[int] = typer.Option(None, help="Seed determinista"),
+    seed: Optional[str] = typer.Option(None, help="Seed determinista"),
     create_mailboxes: bool = typer.Option(False, help="Crear buzones en Mailcow"),
     preview: bool = typer.Option(False, help="Solo mostrar resultado sin persistir"),
 ) -> None:  # pragma: no cover - stub
@@ -29,13 +30,13 @@ def populate(
     spec = PopulationSpec(
         count=count,
         gender=gender,
-        country=country,
+        country=country or "",
         city=city,
         age_range=_parse_age_range(age_range),
         interests=_parse_interests(interests),
         seed=seed,
     )
-    typer.echo(json.dumps(spec.dict(), indent=2, default=str))
+    typer.echo(json.dumps(asdict(spec), indent=2, default=str))
     if preview:
         typer.echo("Modo preview no persistente (TODO)")
     if create_mailboxes:

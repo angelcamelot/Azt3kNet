@@ -16,9 +16,9 @@ Implementar una pipeline determinista para generar poblaciones sintéticas con i
    - Añadir configuración de cron o systemd-lite en contenedor para ejecutar `dyn_updater` con intervalo.
    - Tests unitarios para `dns_manager` usando `pytest` con `responses`.
 
-3. **Adaptador LLM y esquemas Pydantic**
+3. **Adaptador LLM y modelos canónicos**
    - Implementar `src/azt3knet/llm/adapter.py` con `generate_field` (incluye seeds deterministas).
-   - Definir `src/azt3knet/models/agent.py` con `Agent`, `AgentIdentity`, `AgentTraits`, `PopulationSpec`.
+   - Consolidar `PopulationSpec` y `AgentProfile` en `src/azt3knet/agent_factory/models.py` para evitar duplicados.
    - Mock tests para comprobar prompts y determinismo.
 
 4. **CLI populate (modo preview)**
@@ -27,7 +27,7 @@ Implementar una pipeline determinista para generar poblaciones sintéticas con i
    - Agregar documentación en `docs/cli.md` con ejemplos.
 
 5. **Provisionamiento de buzones y persistencia**
-   - Implementar `mailcow_provisioner.py` con llamadas POST `/api/v1/add/mailbox`, retries/backoff y manejo de conflictos.
+   - Implementar `src/azt3knet/services/mailcow_provisioner.py` con llamadas POST `/api/v1/add/mailbox`, retries/backoff y manejo de conflictos.
    - Integrar cifrado de contraseñas con `SECRET_KEY_FOR_KV_ENC` (libsodium/fernet).
    - Añadir repositorio DB (`sqlalchemy`/`asyncpg` o actual stack) con tablas `agent_mailbox`, `audit_log`, etc.
    - Extender CLI/API para `--create-mailboxes` / `create_mailboxes`.
@@ -50,9 +50,9 @@ Implementar una pipeline determinista para generar poblaciones sintéticas con i
 - `infra/dns_bootstrap.py` (esqueleto inicial con TODOs).
 - `infra/dyn_updater.py` (esqueleto).
 - `src/azt3knet/dns/dns_manager.py` (clase placeholder con interfaces).
-- `src/azt3knet/mail/mailcow_provisioner.py` (interface + TODOs).
 - `src/azt3knet/llm/adapter.py` (función stub `generate_field`).
-- `src/azt3knet/models/agent.py` (dataclasses/pydantic stubs).
+- `src/azt3knet/agent_factory/models.py` (dataclasses compartidas para agentes).
+- `src/azt3knet/services/mailcow_provisioner.py` (interface + TODOs).
 - `src/azt3knet/population/builder.py` (función stub `build_population`).
 - `src/azt3knet/cli/populate.py` (CLI stub con Typer).
 - `src/azt3knet/api/routes/populate.py` (FastAPI router stub).
