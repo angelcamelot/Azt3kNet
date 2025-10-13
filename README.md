@@ -18,6 +18,7 @@ Azt3kNet is a research-oriented Python system that models networks of digital ag
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md         # Deep dive into the proposed architecture
+│   ├── mail-architecture.md    # Mailcow + deSEC automation plan
 │   ├── ADRs/                   # Architecture decision records
 │   └── diagrams/               # Component/flow diagrams
 ├── infra/
@@ -197,6 +198,20 @@ poetry run pytest
    ```bash
    ./scripts/dev_up.sh
    ```
+
+## ✉️ Mail infrastructure
+
+The project ships with a full automation layer for Mailcow (mail server) and
+deSEC (DNSSEC-enabled dynamic DNS). Review [`docs/mail-architecture.md`](docs/mail-architecture.md)
+for the detailed blueprint, environment variables and bootstrap scripts. Core
+modules live under `azt3knet.services` and expose:
+
+* `MailcowProvisioner` – REST client that creates/updates agent mailboxes and
+  app-passwords.
+* `DeSECDNSManager` – ensures MX/SPF/DKIM/DMARC records exist and keeps DynDNS
+  assignments fresh.
+* `MailService` – SMTP/IMAP convenience wrapper to send and fetch emails per
+  agent.
 
 3. Pull the Ollama model the first time you run the stack (replace `llama2`
    with the value you configured in `infra/docker/.env`):
