@@ -1,13 +1,13 @@
-"""Bootstrap de registros DNS para dominios de Azt3kNet.
+"""Bootstrap DNS records for Azt3kNet managed domains.
 
-Este módulo se ejecutará dentro del contenedor `azt3knet-dns-bootstrap` después de que
-Mailcow esté operativo. Su responsabilidad incluye:
+This module is executed inside the ``azt3knet-dns-bootstrap`` container after
+the Mailcow stack is healthy. Its responsibilities include:
 
-* Crear registros A/MX/SPF/DMARC iniciales en deSEC.
-* Publicar claves DKIM recuperadas desde Mailcow.
-* Programar/registrar el job de actualización dinámica.
+* Creating initial A/MX/SPF/DMARC records in deSEC.
+* Publishing DKIM keys fetched from Mailcow.
+* Scheduling the recurring dynamic DNS update job.
 
-La implementación real se añadirá en commits posteriores.
+The real implementation will be provided in a follow-up commit.
 """
 
 from __future__ import annotations
@@ -16,10 +16,7 @@ from typing import NoReturn
 
 
 def main() -> NoReturn:
-    """Punto de entrada provisional.
-
-    TODO: Implementar lógica de bootstrap DNS y orquestación con deSEC.
-    """
+    """Placeholder entry point until the automation is implemented."""
 
     raise NotImplementedError("dns_bootstrap main pending implementation")
 

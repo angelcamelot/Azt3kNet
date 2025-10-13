@@ -1,6 +1,8 @@
-"""Adaptador para la IA local (Ollama u otro LLM) utilizado por Azt3kNet."""
+"""Adapter for the local LLM (Ollama or similar) used by Azt3kNet."""
 
 from __future__ import annotations
+
+import hashlib
 
 from dataclasses import dataclass
 from typing import Protocol
@@ -8,7 +10,7 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class LLMRequest:
-    """Representa un prompt dirigido a la IA local."""
+    """Container describing a prompt sent to the local language model."""
 
     prompt: str
     seed: int
@@ -16,19 +18,35 @@ class LLMRequest:
 
 
 class LLMAdapter(Protocol):
-    """Contrato de interacción con el modelo local."""
+    """Interface implemented by language model adapters."""
 
     def generate_field(self, request: LLMRequest) -> str:
-        """Devuelve exclusivamente el texto generado por la IA."""
+        """Return the generated text for the requested field."""
 
 
 class LocalLLMAdapter:
-    """Implementación base pendiente."""
+    """Deterministic offline adapter used for testing and previews."""
+
+    _VOCABULARY = (
+        "aurora",
+        "lumen",
+        "nexus",
+        "signal",
+        "glyph",
+        "vector",
+        "orbit",
+        "stride",
+    )
 
     def __init__(self, *, model: str = "ollama:latest") -> None:
         self.model = model
 
-    def generate_field(self, request: LLMRequest) -> str:  # pragma: no cover - stub
-        """TODO: Invocar al LLM local respetando determinismo vía seed."""
+    def generate_field(self, request: LLMRequest) -> str:
+        """Return a short deterministic phrase for the requested field."""
 
-        raise NotImplementedError
+        payload = f"{self.model}:{request.seed}:{request.field_name}:{request.prompt}"
+        digest = hashlib.sha256(payload.encode("utf-8")).digest()
+        tokens = []
+        for index in range(3):
+            tokens.append(self._VOCABULARY[digest[index] % len(self._VOCABULARY)])
+        return "-".join(tokens)

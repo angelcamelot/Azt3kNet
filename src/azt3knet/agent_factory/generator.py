@@ -23,10 +23,10 @@ COUNTRY_LOCALES = {
 }
 
 NAMES_BY_GENDER = {
-    "female": ["Aitana", "Marisol", "Noemí", "Ivanna", "Camila"],
-    "male": ["Diego", "Leonardo", "Mateo", "Iker", "Gael"],
-    "non_binary": ["Alex", "Dani", "Ari", "Noa", "Ren"],
-    "unspecified": ["Sam", "Kai", "Luca", "Riley", "Morgan"],
+    "female": ["Avery", "Luna", "Harper", "Zoe", "Maya"],
+    "male": ["Ethan", "Leo", "Miles", "Luca", "Kai"],
+    "non_binary": ["Alex", "River", "Rowan", "Sky", "Phoenix"],
+    "unspecified": ["Sam", "Taylor", "Morgan", "Hayden", "Parker"],
 }
 
 DEFAULT_BEHAVIORS = [
