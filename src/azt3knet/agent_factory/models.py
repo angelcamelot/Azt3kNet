@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import List, Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple, get_args
 import uuid
 
 
 Gender = Literal["female", "male", "non_binary", "unspecified"]
 Cadence = Literal["hourly", "daily", "weekly", "monthly"]
 Tone = Literal["casual", "formal", "enthusiastic", "sarcastic", "informative"]
+
+
+_GENDER_VALUES = set(get_args(Gender))
 
 
 @dataclass
@@ -56,6 +59,9 @@ class PopulationSpec:
     persist: bool = False
 
     def __post_init__(self) -> None:
+        if self.gender is not None and self.gender not in _GENDER_VALUES:
+            allowed = ", ".join(sorted(_GENDER_VALUES))
+            raise ValueError(f"gender must be one of: {allowed}")
         if self.count <= 0:
             raise ValueError("count must be greater than zero")
         if self.age_range:
