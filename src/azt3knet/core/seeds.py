@@ -32,7 +32,10 @@ def cycle_choices(options: Sequence[str], count: int, rng: random.Random) -> Lis
 
     if not options:
         return []
-    return [options[(rng.randrange(len(options)) + idx) % len(options)] for idx in range(count)]
+
+    options_len = len(options)
+    offset = rng.randrange(options_len)
+    return [options[(offset + idx) % options_len] for idx in range(count)]
 
 
 def shuffle_iterable(values: Iterable[str], rng: random.Random) -> List[str]:
