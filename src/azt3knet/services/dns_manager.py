@@ -72,7 +72,7 @@ class DeSECDNSManager:
     def list_rrsets(self) -> list[dict[str, object]]:
         """Return all RRsets for the configured domain."""
 
-        response = self._client.get(f"/domains/{self._settings.domain}/rrsets/")
+        response = self._client.get(f"domains/{self._settings.domain}/rrsets/")
         response.raise_for_status()
         payload = response.json()
         assert isinstance(payload, list)
@@ -83,7 +83,7 @@ class DeSECDNSManager:
 
         logger.debug("Upserting RRset %s.%s", rrset.subname, rrset.type)
         response = self._client.put(
-            f"/domains/{self._settings.domain}/rrsets/{rrset.type}/{rrset.subname or '@'}/",
+            f"domains/{self._settings.domain}/rrsets/{rrset.type}/{rrset.subname or '@'}/",
             json=rrset.as_payload(),
         )
         response.raise_for_status()
@@ -94,7 +94,7 @@ class DeSECDNSManager:
         payload = [rrset.as_payload() for rrset in rrsets]
         logger.debug("Bulk upserting %d RRsets", len(payload))
         response = self._client.patch(
-            f"/domains/{self._settings.domain}/rrsets/",
+            f"domains/{self._settings.domain}/rrsets/",
             json=payload,
         )
         response.raise_for_status()
@@ -104,7 +104,7 @@ class DeSECDNSManager:
 
         logger.debug("Deleting RRset %s %s", subname, rrtype)
         response = self._client.delete(
-            f"/domains/{self._settings.domain}/rrsets/{rrtype}/{subname or '@'}/"
+            f"domains/{self._settings.domain}/rrsets/{rrtype}/{subname or '@'}/"
         )
         response.raise_for_status()
 
