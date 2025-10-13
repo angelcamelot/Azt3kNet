@@ -189,11 +189,19 @@ poetry run pytest
 ## 🔧 Getting Started (Summary)
 
 1. Install [Ollama](https://ollama.ai/) and download the required model (`ollama pull <model>`).
-2. Set up the Python environment (e.g., `poetry install`).
-3. Start auxiliary services (Redis/Postgres) with `docker-compose up` inside `infra/docker/`.
-4. Run migrations (`azt3knet db upgrade`).
-5. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
-6. Use the CLI/API according to the flows above.
+2. Copy the provided environment templates and adjust them to your workstation:
+
+   ```bash
+   ./scripts/bootstrap_env.sh
+   ```
+
+   This command creates `.env` and `infra/docker/.env` from their respective templates.
+
+3. Set up the Python environment (e.g., `poetry install`).
+4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh`.
+5. Run migrations (`azt3knet db upgrade`).
+6. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
+7. Use the CLI/API according to the flows above.
 
 ### Sprint 1 (Functional Inception)
 

@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.*
+!.env.example
+infra/docker/.env
+infra/docker/.env.*
+!infra/docker/.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.Python
+build/
+dist/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
+
+# Local databases and fixtures
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+infra/docker/.env.local
