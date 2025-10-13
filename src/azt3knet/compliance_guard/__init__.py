@@ -1,7 +1,23 @@
-"""Compliance guard rails and auditing utilities.
+"""Compliance guard rails and auditing utilities."""
 
-Modules under this package enforce Azt3kNet's safety policies by
-reviewing generated content, labeling risky items, and recording audit
-logs. Implementations should remain deterministic and operate entirely
-on synthetic data.
-"""
+from .audit import AuditEvent, AuditLog
+from .pipeline import (
+    ComplianceDecision,
+    ComplianceGuard,
+    ComplianceViolation,
+    GuardedLLMAdapter,
+    ensure_guarded_llm,
+    get_default_guard,
+)
+
+__all__ = [
+    "AuditEvent",
+    "AuditLog",
+    "ComplianceDecision",
+    "ComplianceGuard",
+    "ComplianceViolation",
+    "GuardedLLMAdapter",
+    "ensure_guarded_llm",
+    "get_default_guard",
+]
+

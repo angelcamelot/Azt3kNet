@@ -8,6 +8,7 @@ from typing import Iterable, List
 
 from .models import AgentProfile, PopulationSpec
 from ..core.config import resolve_seed
+from ..compliance_guard import ensure_guarded_llm
 from ..core.seeds import SeedSequence, cycle_choices, shuffle_iterable
 from ..llm.adapter import LLMAdapter, LLMRequest, LocalLLMAdapter
 
@@ -186,7 +187,10 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
     cadences = cycle_choices(POSTING_CADENCES, spec.count, rng_for_cadence)
     rng_for_tone = seed_sequence.random("tone")
     tones = cycle_choices(TONES, spec.count, rng_for_tone)
-    adapter = llm or LocalLLMAdapter()
+    adapter = ensure_guarded_llm(
+        llm or LocalLLMAdapter(),
+        context="agent_factory.generate_agents",
+    )
     used_names: set[str] = set()
 
     agents: List[AgentProfile] = []

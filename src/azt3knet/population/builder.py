@@ -10,6 +10,7 @@ from typing import List
 
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
+from azt3knet.compliance_guard import ensure_guarded_llm
 from azt3knet.core.config import derive_seed_components, resolve_seed
 from azt3knet.core.mail_config import (
     MailcowSettings,
@@ -129,7 +130,9 @@ def build_population(
     resolved_seed = resolve_seed(spec.seed)
     numeric_seed = SeedSequence(f"{resolved_seed}:{deterministic_seed}")
 
-    agents = generate_agents(spec, llm=llm)
+    guarded_llm = ensure_guarded_llm(llm, context="population.build_population")
+
+    agents = generate_agents(spec, llm=guarded_llm)
     if spec.preview:
         agents = agents[: spec.preview]
 
@@ -145,7 +148,7 @@ def build_population(
                     f"Generate a lowercase alias (no spaces) for the mailbox of agent {agent.name} "
                     f"located in {agent.country}."
                 )
-                alias_text = llm.generate_field(
+                alias_text = guarded_llm.generate_field(
                     LLMRequest(
                         prompt=prompt,
                         seed=deterministic_seed + index,
