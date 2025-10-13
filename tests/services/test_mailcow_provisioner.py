@@ -44,6 +44,7 @@ def test_create_agent_mailbox_issues_expected_requests(
             assert request.url.path == "/api/v1/add/mailbox"
             assert json_payload["local_part"] == "agent_alpha"
             assert json_payload["rl_value"] == 100
+            assert json_payload["password2"] == "s3cret"
             return httpx.Response(200, json={"status": "success"})
         if request.url.path.endswith("/add/app-passwd"):
             assert request.url.path == "/api/v1/add/app-passwd"
@@ -93,6 +94,8 @@ def test_create_agent_mailbox_preserves_falsy_values(
     assert calls, "Expected at least one mailbox creation call"
     payload = calls[0]
     assert payload["password"] == ""
+    assert payload["password2"] == ""
+    assert payload["force_pw_update"] == "0"
     assert payload["quota"] == 0
     assert credentials.password == ""
 

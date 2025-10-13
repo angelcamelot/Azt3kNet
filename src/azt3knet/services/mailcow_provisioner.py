@@ -144,6 +144,8 @@ class MailcowProvisioner:
             "local_part": local_part,
             "name": display_name or agent_id,
             "password": password,
+            "password2": password,
+            "force_pw_update": "0",
             "quota": quota_mb,
         }
         if self._provisioning.rate_limit_per_hour:
