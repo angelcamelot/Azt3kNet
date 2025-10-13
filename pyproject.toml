@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "azt3knet"
+version = "0.1.0"
+description = "First functional sprint for the Azt3kNet synthetic agent simulator"
+authors = ["Azt3kNet Contributors <devnull@example.com>"]
+readme = "README.md"
+packages = [{ include = "azt3knet", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = { version = "^0.12.3", extras = ["all"] }
+fastapi = "^0.111.0"
+uvicorn = { version = "^0.30.0", extras = ["standard"] }
+pydantic = "^2.7.0"
+pydantic-settings = "^2.3.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+httpx = "^0.27.0"
+
+[tool.poetry.scripts]
+azt3knet = "azt3knet.cli.app:run"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
