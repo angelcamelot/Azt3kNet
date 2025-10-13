@@ -34,9 +34,10 @@ class StubProvisioner:
         quota_mb: int | None = None,
     ) -> MailboxCredentials:
         self.created.append(agent_id)
+        resolved_password = "example-password" if password is None else password
         return MailboxCredentials(
             address=f"agent_{agent_id}@example.org",
-            password=password or "example-password",
+            password=resolved_password,
             app_password="example-app-pass",
             smtp_host="smtp.example.org",
             smtp_port=587,
