@@ -184,6 +184,45 @@ poetry run pytest
 
 ## 🔧 Getting Started (Summary)
 
+### Docker quick start
+
+1. Bootstrap the environment files (creates `.env` and `infra/docker/.env`):
+
+   ```bash
+   ./scripts/bootstrap_env.sh
+   ```
+
+2. Start the full stack (API + Postgres + Redis + Ollama) in the background:
+
+   ```bash
+   ./scripts/dev_up.sh
+   ```
+
+3. Pull the Ollama model the first time you run the stack (replace `llama2`
+   with the value you configured in `infra/docker/.env`):
+
+   ```bash
+   docker compose exec ollama ollama pull llama2
+   ```
+
+4. The API is now available at [http://localhost:8000](http://localhost:8000).
+   To generate a preview population via the CLI inside the container, run:
+
+   ```bash
+   docker compose run --rm api azt3knet populate --gender female --count 10 --country MX --preview 3
+   ```
+
+5. When finished, shut everything down and remove containers with:
+
+   ```bash
+   ./scripts/dev_down.sh
+   ```
+
+The compose file mounts the repository into the container and runs
+Uvicorn in reload mode, so code changes are reflected immediately.
+
+### Manual setup
+
 1. Install [Ollama](https://ollama.ai/) and download the required model (`ollama pull <model>`).
 2. Copy the provided environment templates and adjust them to your workstation:
 
@@ -194,7 +233,7 @@ poetry run pytest
    This command creates `.env` and `infra/docker/.env` from their respective templates.
 
 3. Set up the Python environment (e.g., `poetry install`).
-4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh`.
+4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh postgres redis ollama`.
 5. Run migrations (`azt3knet db upgrade`).
 6. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
 7. Use the CLI/API according to the flows above.

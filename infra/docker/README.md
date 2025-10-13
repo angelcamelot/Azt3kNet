@@ -9,13 +9,13 @@ the local dependencies required by Azt3kNet:
 
 ## Quick start
 
-1. Copy the environment defaults:
+1. Copy the environment defaults (or run `./scripts/bootstrap_env.sh`):
 
    ```bash
    cp infra/docker/.env.example infra/docker/.env
    ```
 
-2. Launch the services:
+2. Launch the services that back the application:
 
    ```bash
    docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yml up -d
@@ -29,3 +29,7 @@ the local dependencies required by Azt3kNet:
 
 The volumes declared in `docker-compose.yml` keep your Postgres data and
 Ollama models between restarts.
+
+> **Tip:** The repository root now includes a `docker-compose.yml` that
+> builds and runs the FastAPI surface together with these dependencies.
+> Use `./scripts/dev_up.sh` to start the full stack in one command.

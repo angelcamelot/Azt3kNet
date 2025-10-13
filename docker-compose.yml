@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      AZT3KNET_ENV: ${AZT3KNET_ENV:-development}
+      AZT3KNET_LOG_LEVEL: ${AZT3KNET_LOG_LEVEL:-INFO}
+      API_HOST: 0.0.0.0
+      API_PORT: ${API_PORT:-8000}
+      DATABASE_BACKEND: ${DATABASE_BACKEND:-postgres}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://azt3knet:azt3knet@postgres:5432/azt3knet}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      QUEUE_POPULATION: ${QUEUE_POPULATION:-population}
+      QUEUE_CONTENT: ${QUEUE_CONTENT:-content}
+      QUEUE_SIMULATION: ${QUEUE_SIMULATION:-simulation}
+      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-9000}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-azt3knet}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama2}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-30}
+    volumes:
+      - ./:/app
+    command: [
+      "uvicorn",
+      "azt3knet.api.main:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8000",
+      "--reload"
+    ]
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-azt3knet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-azt3knet}
+      POSTGRES_DB: ${POSTGRES_DB:-azt3knet}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-azt3knet} -d ${POSTGRES_DB:-azt3knet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres-data:
+  ollama-data:
