@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 import uuid
 from contextlib import ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import List
 
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
-from azt3knet.core.config import resolve_seed
+from azt3knet.core.config import derive_seed_components, resolve_seed
 from azt3knet.core.mail_config import (
     MailcowSettings,
     MailProvisioningSettings,
@@ -73,6 +73,15 @@ class PopulationPreview:
 
     agents: List[AgentProfile]
     mailboxes: List[MailboxAssignment] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PopulationGenerationResult:
+    """Return value bundling the preview with the resolved seed context."""
+
+    seed: str
+    deterministic_seed: int
+    preview: PopulationPreview
 
 
 def _sanitize_local_part(value: str, fallback: str, *, max_length: int = 32) -> str:
@@ -154,4 +163,36 @@ def build_population(
     return PopulationPreview(agents=agents, mailboxes=mailboxes)
 
 
-__all__ = ["PopulationPreview", "MailboxAssignment", "build_population"]
+def generate_population_preview(
+    spec: PopulationSpec,
+    *,
+    namespace: str,
+    llm: LLMAdapter,
+    create_mailboxes: bool = False,
+    mail_provisioner: MailcowProvisioner | None = None,
+) -> PopulationGenerationResult:
+    """Normalize seeds and build a population preview for a given namespace."""
+
+    resolved_seed, deterministic_seed = derive_seed_components(spec.seed, namespace=namespace)
+    normalized_spec = replace(spec, seed=resolved_seed)
+    preview = build_population(
+        normalized_spec,
+        llm=llm,
+        deterministic_seed=deterministic_seed,
+        create_mailboxes=create_mailboxes,
+        mail_provisioner=mail_provisioner,
+    )
+    return PopulationGenerationResult(
+        seed=resolved_seed,
+        deterministic_seed=deterministic_seed,
+        preview=preview,
+    )
+
+
+__all__ = [
+    "PopulationPreview",
+    "MailboxAssignment",
+    "PopulationGenerationResult",
+    "build_population",
+    "generate_population_preview",
+]

@@ -8,10 +8,8 @@ from typing import Optional
 import typer
 
 from azt3knet.agent_factory.models import PopulationSpec
-from azt3knet.core.config import resolve_seed
-from azt3knet.core.seeds import SeedSequence
 from azt3knet.llm.adapter import LocalLLMAdapter
-from azt3knet.population.builder import build_population
+from azt3knet.population.builder import generate_population_preview
 
 app = typer.Typer(help="Population utilities for deterministic previews")
 
@@ -40,18 +38,17 @@ def populate(
         seed=seed,
         preview=preview,
     )
-    resolved_seed = resolve_seed(spec.seed)
-    numeric_seed = SeedSequence(resolved_seed).derive("cli")
     adapter = LocalLLMAdapter()
-    preview_result = build_population(
+    generation = generate_population_preview(
         spec,
+        namespace="cli",
         llm=adapter,
-        deterministic_seed=numeric_seed,
         create_mailboxes=create_mailboxes,
     )
+    preview_result = generation.preview
 
     payload: dict[str, object] = {
-        "seed": resolved_seed,
+        "seed": generation.seed,
         "count": len(preview_result.agents),
         "agents": [agent.model_dump(mode="json") for agent in preview_result.agents],
     }
