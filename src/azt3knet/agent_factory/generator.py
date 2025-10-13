@@ -218,6 +218,7 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
             used=used_names,
         )
         username_hint = _username_hint(name, spec.city, seed_sequence, idx, used_usernames)
+        agent_interests = list(interests)
         agent = AgentProfile(
             id=uuid.uuid5(uuid.NAMESPACE_URL, f"azt3knet://agents/{seed}/{idx}"),
             seed=f"{seed}:{idx}",
@@ -229,11 +230,11 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
             timezone=_time_zone(spec.country),
             age=_age_range(spec, seed_sequence, idx),
             gender=gender,  # type: ignore[arg-type]
-            interests=interests,
-            bio=_build_bio(name, interests, spec.city),
+            interests=agent_interests,
+            bio=_build_bio(name, agent_interests, spec.city),
             posting_cadence=cadences[idx],  # type: ignore[index]
             tone=tones[idx],  # type: ignore[index]
-            behavioral_biases=_behaviors(interests, seed_sequence, idx),
+            behavioral_biases=_behaviors(agent_interests, seed_sequence, idx),
         )
         agents.append(agent)
     return agents

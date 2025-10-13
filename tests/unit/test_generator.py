@@ -51,6 +51,21 @@ def test_generate_agents_produces_unique_username_hints():
     assert len(hints) == len(set(hints))
 
 
+def test_generate_agents_returns_distinct_interest_lists():
+    spec = PopulationSpec(
+        count=2,
+        country="US",
+        seed="seed-independent-interests",
+        interests=["digital art", "community events"],
+    )
+
+    agents = generate_agents(spec)
+
+    agents[0].interests.append("gardening")
+
+    assert "gardening" not in agents[1].interests
+
+
 def test_cycle_choices_walks_sequentially_from_offset():
     options = ["alpha", "beta", "gamma", "delta"]
     rng = random.Random(2024)
