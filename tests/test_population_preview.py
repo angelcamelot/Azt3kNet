@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from azt3knet.agent_factory.models import PopulationSpec
+import uuid
+
+from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
+from azt3knet.compliance_guard import ComplianceViolation
+from azt3knet.core.config import resolve_seed
+from azt3knet.core.seeds import SeedSequence
 from azt3knet.llm.adapter import LLMAdapter, LLMRequest
+from azt3knet.population import builder as population_builder
 from azt3knet.population.builder import PopulationPreview, build_population
 from azt3knet.services.mailcow_provisioner import MailboxCredentials
 
@@ -77,3 +83,62 @@ def test_build_population_with_mailboxes(monkeypatch) -> None:
     assert provisioner.created  # ensure the stub was used
     assert all(assignment.address.endswith("@example.org") for assignment in preview.mailboxes)
     assert not provisioner.closed
+
+
+class MailboxViolatingLLM(LLMAdapter):
+    """Stub LLM that raises a compliance violation when generating aliases."""
+
+    def generate_field(self, request: LLMRequest) -> str:
+        raise ComplianceViolation("mailbox alias rejected")
+
+
+def test_build_population_mailbox_alias_fallback(monkeypatch, caplog) -> None:
+    """Provisioning falls back to deterministic aliases when the guard rejects output."""
+
+    agent = AgentProfile(
+        id=uuid.uuid4(),
+        seed="seed:0",
+        name="Fallback Agent",
+        username_hint="Fallback_User_123",
+        country="US",
+        city="",
+        locale="en_US",
+        timezone="America/New_York",
+        age=30,
+        gender="unspecified",
+        interests=["digital culture"],
+        bio="Bio",
+        posting_cadence="daily",
+        tone="informative",
+        behavioral_biases=["early_adopter"],
+    )
+
+    def fake_generate_agents(spec: PopulationSpec, llm: LLMAdapter):
+        return [agent]
+
+    monkeypatch.setattr(population_builder, "generate_agents", fake_generate_agents)
+
+    spec = PopulationSpec(count=1, country="US", seed="guarded-seed")
+    provisioner = StubProvisioner()
+    deterministic_seed = 2024
+
+    with caplog.at_level("WARNING"):
+        preview = build_population(
+            spec,
+            llm=MailboxViolatingLLM(),
+            deterministic_seed=deterministic_seed,
+            create_mailboxes=True,
+            mail_provisioner=provisioner,
+        )
+
+    assert len(preview.mailboxes) == 1
+    resolved_seed = resolve_seed(spec.seed)
+    numeric_seed = SeedSequence(f"{resolved_seed}:{deterministic_seed}")
+    expected_identifier = population_builder._mailbox_identifier(
+        agent,
+        agent.username_hint,
+        numeric_seed,
+        0,
+    )
+    assert provisioner.created == [expected_identifier]
+    assert "Compliance guard rejected mailbox alias" in caplog.text
