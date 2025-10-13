@@ -2,7 +2,9 @@ import random
 
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import PopulationSpec
-from azt3knet.core.seeds import cycle_choices
+from azt3knet.compliance_guard import ComplianceViolation
+from azt3knet.core.config import resolve_seed
+from azt3knet.core.seeds import SeedSequence, cycle_choices
 from azt3knet.llm.adapter import LLMAdapter, LLMRequest
 
 
@@ -36,12 +38,31 @@ class ConstantNameLLM(LLMAdapter):
         return "test-name"
 
 
+class ViolatingLLM(LLMAdapter):
+    def generate_field(self, request: LLMRequest) -> str:
+        raise ComplianceViolation("name rejected")
+
+
 def test_generate_agents_accepts_custom_llm():
     llm = ConstantNameLLM()
     spec = PopulationSpec(count=1, country="ES", seed="seed-custom")
     agents = generate_agents(spec, llm=llm)
     assert agents[0].name == "Test Name"
     assert llm.calls  # ensure the custom adapter was invoked
+
+
+def test_generate_agents_falls_back_when_compliance_rejects_all_attempts():
+    spec = PopulationSpec(count=1, country="US", seed="seed-compliance")
+    llm = ViolatingLLM()
+
+    agents = generate_agents(spec, llm=llm)
+
+    resolved_seed = resolve_seed(spec.seed)
+    sequence = SeedSequence(resolved_seed)
+    expected_number = sequence.derive("fallback-name", "0", "0") % 10_000
+    expected_name = f"Agent {expected_number:04d}"
+
+    assert agents[0].name == expected_name
 
 
 def test_generate_agents_produces_unique_username_hints():
