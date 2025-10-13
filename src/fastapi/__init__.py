@@ -59,6 +59,7 @@ class FastAPI:
         self.version = version
         self._routes: Dict[Tuple[str, str], RouteHandler] = {}
         self._startup_handlers: List[Callable[[], Awaitable[None] | None]] = []
+        self._startup_complete = False
 
     def _register(self, method: str, path: str, handler: RouteHandler) -> RouteHandler:
         self._routes[(method.upper(), path)] = handler
@@ -98,6 +99,9 @@ class FastAPI:
                 await result
 
     async def _call(self, method: str, path: str, payload: Optional[dict[str, Any]] = None) -> Tuple[int, Any]:
+        if not self._startup_complete:
+            await self._run_startup()
+            self._startup_complete = True
         handler = self._routes.get((method.upper(), path))
         if handler is None:
             return 404, {"detail": "Not Found"}

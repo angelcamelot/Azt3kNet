@@ -1,3 +1,4 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from azt3knet.api.main import app
@@ -71,3 +72,26 @@ def test_population_endpoint_rejects_invalid_gender():
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert "gender" in detail
+
+
+def test_startup_hook_runs_before_first_request():
+    startup_calls: list[str] = []
+    local_app = FastAPI()
+
+    @local_app.on_event("startup")
+    async def _startup_hook() -> None:
+        startup_calls.append("startup")
+
+    @local_app.get("/ping")
+    async def _ping() -> dict[str, bool]:
+        return {"pong": True}
+
+    local_client = TestClient(local_app)
+
+    response = local_client.get("/ping")
+    assert response.status_code == 200
+    assert startup_calls == ["startup"]
+
+    response = local_client.get("/ping")
+    assert response.status_code == 200
+    assert startup_calls == ["startup"]
