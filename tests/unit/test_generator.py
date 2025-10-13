@@ -1,5 +1,8 @@
+import random
+
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import PopulationSpec
+from azt3knet.core.seeds import cycle_choices
 from azt3knet.llm.adapter import LLMAdapter, LLMRequest
 
 
@@ -46,3 +49,12 @@ def test_generate_agents_produces_unique_username_hints():
     agents = generate_agents(spec)
     hints = [agent.username_hint for agent in agents]
     assert len(hints) == len(set(hints))
+
+
+def test_cycle_choices_walks_sequentially_from_offset():
+    options = ["alpha", "beta", "gamma", "delta"]
+    rng = random.Random(2024)
+
+    result = cycle_choices(options, count=6, rng=rng)
+
+    assert result == ["delta", "alpha", "beta", "gamma", "delta", "alpha"]
