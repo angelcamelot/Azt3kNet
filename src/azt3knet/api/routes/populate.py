@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Any
 
-from azt3knet.models.agent import PopulationSpec
+from fastapi import APIRouter, HTTPException
 
-router = APIRouter(prefix="/api", tags=["population"])
+from azt3knet.agent_factory.generator import generate_agents
+from azt3knet.agent_factory.models import PopulationSpec
+
+router = APIRouter(tags=["population"])
 
 
 @router.post("/populate")
-async def populate_endpoint(spec: PopulationSpec, create_mailboxes: bool = False) -> dict[str, str]:  # pragma: no cover - stub
-    """Endpoint placeholder que retornará un resumen cuando se implemente."""
+async def populate_endpoint(
+    payload: dict[str, Any],
+    create_mailboxes: bool = False,
+) -> dict[str, str]:  # pragma: no cover - stub
+    """Endpoint placeholder que normaliza el payload con ``PopulationSpec``."""
 
-    return {"status": "pending", "create_mailboxes": str(create_mailboxes)}
+    try:
+        spec = PopulationSpec.from_dict(payload)
+    except ValueError as exc:  # pragma: no cover - exercised via tests
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    agents = generate_agents(spec)
+    if spec.preview:
+        agents = agents[: spec.preview]
+
+    return {
+        "seed": spec.seed,
+        "count": len(agents),
+        "agents": [agent.model_dump(mode="json") for agent in agents],
+        "create_mailboxes": create_mailboxes,
+    }
