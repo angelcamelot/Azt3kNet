@@ -11,6 +11,10 @@ from typing import Any
 import httpx
 
 from azt3knet.core.mail_config import MailProvisioningSettings, MailcowSettings
+from azt3knet.services.resilient_http_client import (
+    ResilientHTTPClient,
+    RetryConfiguration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +40,26 @@ class MailcowProvisioner:
         mailcow: MailcowSettings,
         provisioning: MailProvisioningSettings,
         *,
-        client: httpx.Client | None = None,
+        client: ResilientHTTPClient | httpx.Client | None = None,
     ) -> None:
         self._mailcow = mailcow
         self._provisioning = provisioning
-        self._client = client or httpx.Client(
-            base_url=mailcow.base_url,
-            headers={"X-API-Key": mailcow.api_key},
-            timeout=30.0,
-            verify=mailcow.verify_tls,
-        )
+        self._client: ResilientHTTPClient
+        if isinstance(client, ResilientHTTPClient):
+            self._client = client
+        else:
+            http_client = client or httpx.Client(
+                base_url=mailcow.base_url,
+                headers={"X-API-Key": mailcow.api_key},
+                timeout=30.0,
+                verify=mailcow.verify_tls,
+            )
+            retry_config = RetryConfiguration(max_retries=4, backoff_factor=0.75)
+            self._client = ResilientHTTPClient(
+                http_client,
+                service_name="mailcow",
+                retry_config=retry_config,
+            )
 
     def close(self) -> None:
         self._client.close()
