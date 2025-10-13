@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import List
 
@@ -125,12 +126,10 @@ def build_population(
 
     mailboxes: List[MailboxAssignment] = []
     if create_mailboxes:
-        provisioner = mail_provisioner
-        should_close = False
-        if provisioner is None:
-            provisioner = _provisioner_from_settings()
-            should_close = True
-        try:
+        with ExitStack() as stack:
+            provisioner = mail_provisioner
+            if provisioner is None:
+                provisioner = stack.enter_context(_provisioner_from_settings())
             provisioner.ensure_domain()
             for index, agent in enumerate(agents):
                 prompt = (
@@ -138,7 +137,11 @@ def build_population(
                     f"located in {agent.country}."
                 )
                 alias_text = llm.generate_field(
-                    LLMRequest(prompt=prompt, seed=deterministic_seed + index, field_name="mailbox_alias")
+                    LLMRequest(
+                        prompt=prompt,
+                        seed=deterministic_seed + index,
+                        field_name="mailbox_alias",
+                    )
                 )
                 identifier = _mailbox_identifier(agent, alias_text, numeric_seed, index)
                 credentials = provisioner.create_agent_mailbox(
@@ -147,9 +150,6 @@ def build_population(
                 )
                 logger.debug("Provisioned mailbox %s for agent %s", credentials.address, agent.id)
                 mailboxes.append(MailboxAssignment.from_credentials(agent.id, credentials))
-        finally:
-            if should_close:
-                provisioner.close()
 
     return PopulationPreview(agents=agents, mailboxes=mailboxes)
 

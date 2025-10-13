@@ -5,10 +5,11 @@ from typing import Optional, get_args
 
 import typer
 
-from ..agent_factory.generator import generate_agents
 from ..agent_factory.models import Gender, PopulationSpec
-from ..core.config import get_settings, resolve_seed
+from ..core.config import derive_seed_components, get_settings
 from ..core.logging import configure_logging
+from ..llm.adapter import LocalLLMAdapter
+from ..population.builder import build_population
 
 app = typer.Typer(help="Synthetic agent operations for the Azt3kNet lab.")
 
@@ -65,6 +66,7 @@ def populate(
         raise typer.BadParameter(f"Invalid value for '--gender'. Choose from: {allowed}")
 
     interests_list = interests.split(",") if interests else None
+    resolved_seed, numeric_seed = derive_seed_components(seed, namespace="cli")
     spec = PopulationSpec(
         gender=gender,  # type: ignore[arg-type]
         count=count,
@@ -72,15 +74,18 @@ def populate(
         city=city,
         age_range=age_range,
         interests=interests_list,
-        seed=resolve_seed(seed),
+        seed=resolved_seed,
         preview=_apply_preview_limit(preview),
         persist=persist,
     )
 
-    agents = generate_agents(spec)
-    if spec.preview:
-        agents = agents[: spec.preview]
-    payload = [agent.model_dump(mode="json") for agent in agents]
+    preview_result = build_population(
+        spec,
+        llm=LocalLLMAdapter(),
+        deterministic_seed=numeric_seed,
+        create_mailboxes=False,
+    )
+    payload = [agent.model_dump(mode="json") for agent in preview_result.agents]
     typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
     if persist:

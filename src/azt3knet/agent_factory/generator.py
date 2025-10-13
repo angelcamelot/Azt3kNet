@@ -88,7 +88,7 @@ def _fallback_name(sequence: SeedSequence, index: int, used: set[str]) -> str:
     attempt = 0
     while True:
         candidate_number = sequence.derive("fallback-name", str(index), str(attempt)) % 10_000
-        candidate = f"Agente {candidate_number:04d}"
+        candidate = f"Agent {candidate_number:04d}"
         if candidate.lower() not in used:
             return candidate
         attempt += 1

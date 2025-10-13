@@ -7,8 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from azt3knet.agent_factory.models import PopulationSpec
-from azt3knet.core.config import resolve_seed
-from azt3knet.core.seeds import SeedSequence
+from azt3knet.core.config import derive_seed_components
 from azt3knet.llm.adapter import LocalLLMAdapter
 from azt3knet.population.builder import build_population
 
@@ -27,12 +26,11 @@ async def populate_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    resolved_seed = resolve_seed(spec.seed)
-    numeric_seed = SeedSequence(resolved_seed).derive("api")
-    adapter = LocalLLMAdapter()
+    resolved_seed, numeric_seed = derive_seed_components(spec.seed, namespace="api")
+    spec.seed = resolved_seed
     preview = build_population(
         spec,
-        llm=adapter,
+        llm=LocalLLMAdapter(),
         deterministic_seed=numeric_seed,
         create_mailboxes=create_mailboxes,
     )
