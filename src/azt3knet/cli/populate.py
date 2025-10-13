@@ -10,6 +10,7 @@ import typer
 from azt3knet.agent_factory.models import PopulationSpec
 from azt3knet.llm.adapter import LocalLLMAdapter
 from azt3knet.population.builder import generate_population_preview
+from azt3knet.storage.agents import AgentPersistenceError, AgentStore, AgentUniquenessError
 
 app = typer.Typer(help="Population utilities for deterministic previews")
 
@@ -25,6 +26,8 @@ def populate(
     seed: Optional[str] = typer.Option(None, help="Deterministic seed"),
     create_mailboxes: bool = typer.Option(False, help="Provision Mailcow mailboxes"),
     preview: Optional[int] = typer.Option(None, help="Limit the preview to N agents"),
+    persist: bool = typer.Option(False, help="Persist generated agents to storage"),
+    db_path: Optional[str] = typer.Option(None, help="Override the SQLite database path"),
 ) -> None:
     """Generate a synthetic population preview and optional mailboxes."""
 
@@ -37,6 +40,7 @@ def populate(
         interests=_parse_interests(interests),
         seed=seed,
         preview=preview,
+        persist=persist,
     )
     adapter = LocalLLMAdapter()
     generation = generate_population_preview(
@@ -54,6 +58,18 @@ def populate(
     }
     if preview_result.mailboxes:
         payload["mailboxes"] = [assignment.as_public_dict() for assignment in preview_result.mailboxes]
+
+    if persist:
+        store = AgentStore(db_path=db_path) if db_path else AgentStore()
+        try:
+            persisted = store.persist_agents(preview_result.agents)
+        except AgentUniquenessError as exc:
+            typer.secho(f"Username conflict detected: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+        except AgentPersistenceError as exc:
+            typer.secho(f"Failed to persist agents: {exc}", err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+        payload["persisted"] = persisted
 
     typer.echo(json.dumps(payload, indent=2))
 
