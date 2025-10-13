@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Callable
 
+from .seeds import SeedSequence
+
 
 _TRUE_VALUES = {"1", "true", "yes"}
 
@@ -64,3 +66,11 @@ def resolve_seed(seed: str | None) -> str:
     if seed:
         return seed
     return get_settings().default_seed
+
+
+def derive_seed_components(seed: str | None, *, namespace: str) -> tuple[str, int]:
+    """Return the resolved seed and a numeric derivation for a namespace."""
+
+    resolved_seed = resolve_seed(seed)
+    numeric_seed = SeedSequence(resolved_seed).derive(namespace)
+    return resolved_seed, numeric_seed
