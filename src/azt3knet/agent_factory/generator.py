@@ -74,6 +74,15 @@ def _location_descriptor(spec: PopulationSpec) -> str:
     return "/".join(parts)
 
 
+def _prepare_name_prompt(spec: PopulationSpec, gender: str) -> str:
+    gender_desc = _gender_descriptor(gender)
+    location_desc = _location_descriptor(spec)
+    return _NAME_PROMPT_TEMPLATE.format(
+        gender_desc=gender_desc,
+        location_desc=location_desc,
+    )
+
+
 def _sanitize_name(value: str) -> str:
     tokens = _NAME_TOKEN_PATTERN.findall(value)
     if not tokens:
@@ -98,30 +107,24 @@ def _fallback_name(sequence: SeedSequence, index: int, used: set[str]) -> str:
 def _generate_agent_name(
     *,
     llm: LLMAdapter,
-    spec: PopulationSpec,
-    gender: str,
+    prompt: str,
     sequence: SeedSequence,
     index: int,
     used: set[str],
 ) -> str:
-    gender_desc = _gender_descriptor(gender)
-    location_desc = _location_descriptor(spec)
-    base_prompt = _NAME_PROMPT_TEMPLATE.format(
-        gender_desc=gender_desc,
-        location_desc=location_desc,
-    )
     for attempt in range(3):
         seed_value = sequence.derive("name", str(index), str(attempt))
         response = llm.generate_field(
             LLMRequest(
-                prompt=f"{base_prompt} (option {attempt + 1})",
+                prompt=f"{prompt} (option {attempt + 1})",
                 seed=seed_value,
                 field_name="agent_name",
             )
         )
         sanitized = _sanitize_name(response)
-        if sanitized and sanitized.lower() not in used:
-            used.add(sanitized.lower())
+        lowered = sanitized.lower()
+        if sanitized and lowered not in used:
+            used.add(lowered)
             return sanitized
     fallback = _fallback_name(sequence, index, used)
     used.add(fallback.lower())
@@ -134,15 +137,21 @@ def _build_bio(name: str, interests: List[str], city: str | None) -> str:
     return f"{name}{location} exploring {interests_text} with synthetic curiosity."
 
 
+def _city_hint(city: str | None) -> str:
+    if not city:
+        return "global"
+    cleaned = city.lower().replace(" ", "")[:6]
+    return cleaned or "global"
+
+
 def _username_hint(
     name: str,
-    city: str | None,
+    city_hint: str,
     rng: SeedSequence,
     index: int,
     used: Set[str],
 ) -> str:
     slug = name.lower().replace(" ", "_")
-    city_hint = (city or "global").lower().replace(" ", "")[:6]
     attempt = 0
     while True:
         suffix_seed = rng.derive(slug, city_hint, str(index), str(attempt))
@@ -196,6 +205,7 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
     seed_sequence = SeedSequence(seed)
     interests = _normalize_interests(spec.interests)
     gender = spec.gender or "unspecified"
+    prompt = _prepare_name_prompt(spec, gender)
     rng_for_cadence = seed_sequence.random("cadence")
     cadences = cycle_choices(POSTING_CADENCES, spec.count, rng_for_cadence)
     rng_for_tone = seed_sequence.random("tone")
@@ -206,34 +216,39 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
     )
     used_names: set[str] = set()
     used_usernames: set[str] = set()
+    city_hint = _city_hint(spec.city)
+    country = spec.country.upper()
+    locale = _locale(spec.country)
+    timezone = _time_zone(spec.country)
+    city_value = spec.city or ""
+    agent_namespace = f"azt3knet://agents/{seed}"
 
     agents: List[AgentProfile] = []
-    for idx in range(spec.count):
+    for idx, (cadence, tone) in enumerate(zip(cadences, tones)):
         name = _generate_agent_name(
             llm=adapter,
-            spec=spec,
-            gender=gender,
+            prompt=prompt,
             sequence=seed_sequence,
             index=idx,
             used=used_names,
         )
-        username_hint = _username_hint(name, spec.city, seed_sequence, idx, used_usernames)
+        username_hint = _username_hint(name, city_hint, seed_sequence, idx, used_usernames)
         agent_interests = list(interests)
         agent = AgentProfile(
-            id=uuid.uuid5(uuid.NAMESPACE_URL, f"azt3knet://agents/{seed}/{idx}"),
+            id=uuid.uuid5(uuid.NAMESPACE_URL, f"{agent_namespace}/{idx}"),
             seed=f"{seed}:{idx}",
             name=name,
             username_hint=username_hint,
-            country=spec.country.upper(),
-            city=spec.city or "",  # keep simple for now
-            locale=_locale(spec.country),
-            timezone=_time_zone(spec.country),
+            country=country,
+            city=city_value,  # keep simple for now
+            locale=locale,
+            timezone=timezone,
             age=_age_range(spec, seed_sequence, idx),
             gender=gender,  # type: ignore[arg-type]
             interests=agent_interests,
             bio=_build_bio(name, agent_interests, spec.city),
-            posting_cadence=cadences[idx],  # type: ignore[index]
-            tone=tones[idx],  # type: ignore[index]
+            posting_cadence=cadence,
+            tone=tone,
             behavioral_biases=_behaviors(agent_interests, seed_sequence, idx),
         )
         agents.append(agent)
