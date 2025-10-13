@@ -4,7 +4,7 @@ from azt3knet.llm.adapter import LLMAdapter, LLMRequest
 
 
 def test_generate_agents_is_deterministic():
-    spec = PopulationSpec(count=3, country="MX", seed="seed-123", interests=["cumbia"])
+    spec = PopulationSpec(count=3, country="MX", seed="seed-123", interests=["street art"])
     first = generate_agents(spec)
     second = generate_agents(spec)
     assert [agent.model_dump() for agent in first] == [agent.model_dump() for agent in second]
@@ -18,7 +18,7 @@ def test_generate_agents_respects_preview_limit_fields():
 
 
 def test_generate_agents_produces_unique_names():
-    spec = PopulationSpec(count=5, country="MX", seed="seed-unique", interests=["arte"])
+    spec = PopulationSpec(count=5, country="MX", seed="seed-unique", interests=["digital art"])
     agents = generate_agents(spec)
     names = [agent.name for agent in agents]
     assert len(names) == len(set(name.lower() for name in names))
@@ -30,12 +30,12 @@ class ConstantNameLLM(LLMAdapter):
 
     def generate_field(self, request: LLMRequest) -> str:
         self.calls.append(request)
-        return "nombre-prueba"
+        return "test-name"
 
 
 def test_generate_agents_accepts_custom_llm():
     llm = ConstantNameLLM()
     spec = PopulationSpec(count=1, country="ES", seed="seed-custom")
     agents = generate_agents(spec, llm=llm)
-    assert agents[0].name == "Nombre Prueba"
+    assert agents[0].name == "Test Name"
     assert llm.calls  # ensure the custom adapter was invoked

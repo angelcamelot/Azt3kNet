@@ -102,7 +102,7 @@ azt3knet populate \
   --country MX \
   --city "Mexico City" \
   --age 18-25 \
-  --interests "cumbia,arte urbano" \
+  --interests "street art,urban culture" \
   --seed 20241005 \
   --preview 10
 ```
@@ -117,7 +117,7 @@ POST /api/populate
   "country": "MX",
   "city": "Mexico City",
   "age_range": [18, 25],
-  "interests": ["cumbia", "arte urbano"],
+  "interests": ["street art", "urban culture"],
   "seed": "20241005",
   "preview": 10
 }
