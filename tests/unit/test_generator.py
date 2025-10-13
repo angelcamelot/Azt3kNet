@@ -39,3 +39,10 @@ def test_generate_agents_accepts_custom_llm():
     agents = generate_agents(spec, llm=llm)
     assert agents[0].name == "Test Name"
     assert llm.calls  # ensure the custom adapter was invoked
+
+
+def test_generate_agents_produces_unique_username_hints():
+    spec = PopulationSpec(count=25, country="MX", seed="seed-unique-usernames")
+    agents = generate_agents(spec)
+    hints = [agent.username_hint for agent in agents]
+    assert len(hints) == len(set(hints))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 import re
-from typing import Iterable, List
+from typing import Iterable, List, Set
 
 from .models import AgentProfile, PopulationSpec
 from ..core.config import resolve_seed
@@ -134,11 +134,24 @@ def _build_bio(name: str, interests: List[str], city: str | None) -> str:
     return f"{name}{location} exploring {interests_text} with synthetic curiosity."
 
 
-def _username_hint(name: str, city: str | None, rng: SeedSequence, index: int) -> str:
+def _username_hint(
+    name: str,
+    city: str | None,
+    rng: SeedSequence,
+    index: int,
+    used: Set[str],
+) -> str:
     slug = name.lower().replace(" ", "_")
     city_hint = (city or "global").lower().replace(" ", "")[:6]
-    suffix = rng.derive(slug, city_hint, str(index)) % 10_000
-    return f"{slug}_{city_hint}{suffix:04d}"
+    attempt = 0
+    while True:
+        suffix_seed = rng.derive(slug, city_hint, str(index), str(attempt))
+        suffix = suffix_seed % 10_000
+        candidate = f"{slug}_{city_hint}{suffix:04d}"
+        if candidate not in used:
+            used.add(candidate)
+            return candidate
+        attempt += 1
 
 
 def _age_range(spec: PopulationSpec, rng: SeedSequence, index: int) -> int:
@@ -192,6 +205,7 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
         context="agent_factory.generate_agents",
     )
     used_names: set[str] = set()
+    used_usernames: set[str] = set()
 
     agents: List[AgentProfile] = []
     for idx in range(spec.count):
@@ -203,7 +217,7 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
             index=idx,
             used=used_names,
         )
-        username_hint = _username_hint(name, spec.city, seed_sequence, idx)
+        username_hint = _username_hint(name, spec.city, seed_sequence, idx, used_usernames)
         agent = AgentProfile(
             id=uuid.uuid5(uuid.NAMESPACE_URL, f"azt3knet://agents/{seed}/{idx}"),
             seed=f"{seed}:{idx}",

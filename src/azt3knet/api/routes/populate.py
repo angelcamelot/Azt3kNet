@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from azt3knet.agent_factory.models import PopulationSpec
 from azt3knet.llm.adapter import LocalLLMAdapter
 from azt3knet.population.builder import generate_population_preview
+from azt3knet.storage.agents import AgentPersistenceError, AgentStore, AgentUniquenessError
 
 router = APIRouter(tags=["population"])
 
@@ -40,4 +41,13 @@ async def populate_endpoint(
     }
     if preview.mailboxes:
         response["mailboxes"] = [mailbox.as_public_dict() for mailbox in preview.mailboxes]
+    if spec.persist:
+        store = AgentStore()
+        try:
+            persisted = store.persist_agents(preview.agents)
+        except AgentUniquenessError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except AgentPersistenceError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        response["persisted"] = persisted
     return response
