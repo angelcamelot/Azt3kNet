@@ -1,7 +1,5 @@
 # 🜂 Azt3kNet
 
-> **Azt3kNet is a local simulation built on 100% synthetic data.** It never automates real accounts or interacts with external platforms.
-
 Azt3kNet is a research-oriented Python system that models networks of digital agents within a self-contained environment. All content and populations are generated locally through [Ollama](https://ollama.ai/) and programmatic prompts with deterministic seeds to ensure reproducibility, diversity, and the absence of PII. The platform exposes CLI and API interfaces so other teams (for example, an analytical frontend) can orchestrate population creation, content generation, and feed simulations under strict ethics and compliance policies.
 
 ## 🚀 Key Capabilities
@@ -180,11 +178,9 @@ poetry run pytest
 
 ## 🧯 Ethics and Compliance Policies
 
-1. **Synthetic data only.** No agent represents real people and importing PII is prohibited.
-2. **No external automation.** Adapters are mocks; they never connect to real APIs or automate social networks.
-3. **Transparency and traceability.** Every generation records the `seed`, prompts used, compliance decisions, and metrics.
-4. **Proactive moderation.** Risky content is blocked or labeled and never published without explicit review.
-5. **Responsible LLM usage.** Ollama runs locally; model versions and parameters are documented.
+1. **Transparency and traceability.** Every generation records the `seed`, prompts used, compliance decisions, and metrics.
+2. **Proactive moderation.** Risky content is blocked or labeled and never published without explicit review.
+3. **Responsible LLM usage.** Ollama runs locally; model versions and parameters are documented.
 
 ## 🔧 Getting Started (Summary)
 
