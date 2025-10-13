@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 import re
 from typing import Iterable, List, Set
 
 from .models import AgentProfile, PopulationSpec
 from ..core.config import resolve_seed
-from ..compliance_guard import ensure_guarded_llm
+from ..compliance_guard import ComplianceViolation, ensure_guarded_llm
 from ..core.seeds import SeedSequence, cycle_choices, shuffle_iterable
 from ..llm.adapter import LLMAdapter, LLMRequest, LocalLLMAdapter
 
@@ -33,6 +34,9 @@ DEFAULT_BEHAVIORS = [
 
 POSTING_CADENCES = ["hourly", "daily", "weekly", "monthly"]
 TONES = ["casual", "formal", "enthusiastic", "sarcastic", "informative"]
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_interests(interests: Iterable[str] | None) -> List[str]:
@@ -108,19 +112,30 @@ def _generate_agent_name(
     *,
     llm: LLMAdapter,
     prompt: str,
+    context: str,
     sequence: SeedSequence,
     index: int,
     used: set[str],
 ) -> str:
     for attempt in range(3):
         seed_value = sequence.derive("name", str(index), str(attempt))
-        response = llm.generate_field(
-            LLMRequest(
-                prompt=f"{prompt} (option {attempt + 1})",
-                seed=seed_value,
-                field_name="agent_name",
+        try:
+            response = llm.generate_field(
+                LLMRequest(
+                    prompt=f"{prompt} (option {attempt + 1})",
+                    seed=seed_value,
+                    field_name="agent_name",
+                )
             )
-        )
+        except ComplianceViolation as exc:
+            logger.warning(
+                "Compliance rejection during agent name generation [context=%s index=%s attempt=%s]: %s",
+                context,
+                index,
+                attempt,
+                exc,
+            )
+            continue
         sanitized = _sanitize_name(response)
         lowered = sanitized.lower()
         if sanitized and lowered not in used:
@@ -210,9 +225,10 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
     cadences = cycle_choices(POSTING_CADENCES, spec.count, rng_for_cadence)
     rng_for_tone = seed_sequence.random("tone")
     tones = cycle_choices(TONES, spec.count, rng_for_tone)
+    context = "agent_factory.generate_agents"
     adapter = ensure_guarded_llm(
         llm or LocalLLMAdapter(),
-        context="agent_factory.generate_agents",
+        context=context,
     )
     used_names: set[str] = set()
     used_usernames: set[str] = set()
@@ -228,6 +244,7 @@ def generate_agents(spec: PopulationSpec, *, llm: LLMAdapter | None = None) -> L
         name = _generate_agent_name(
             llm=adapter,
             prompt=prompt,
+            context=context,
             sequence=seed_sequence,
             index=idx,
             used=used_names,
