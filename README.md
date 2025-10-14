@@ -210,6 +210,20 @@ stack. The tables below document every variable that the application consumes.
 | `REDIS_URL` | Redis connection URL used by workers and background jobs. |
 | `QUEUE_POPULATION` / `QUEUE_CONTENT` / `QUEUE_SIMULATION` | Queue names consumed by the scheduler. |
 
+### Object storage (MinIO / S3-compatible)
+
+| Variable | Description |
+| --- | --- |
+| `MINIO_ENDPOINT` | URL used by host tooling to reach the S3 API (defaults to `http://localhost:9000`). |
+| `MINIO_ENDPOINT_INTERNAL` | Service URL used inside Docker networks (defaults to `http://minio:9000`). |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Credentials for the S3-compatible API (**secret**). |
+| `MINIO_REGION` | Region name forwarded to `s3fs`/`minio` clients (default `us-east-1`). |
+| `MINIO_USE_SSL` | When `true`, connects over HTTPS instead of HTTP. |
+| `AZT3KNET_BLOB_BUCKET` | Primary bucket that stores generated fixtures and exports. |
+| `AZT3KNET_BLOB_BUCKETS` | Optional comma-separated list when multiple buckets must exist. |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | Credentials injected into the development MinIO container. |
+| `MINIO_PORT` / `MINIO_CONSOLE_PORT` | Host ports exposed by the compose files for the API and admin console. |
+
 ### Observability and feature flags
 
 | Variable | Description |
@@ -271,7 +285,7 @@ mailboxes and syncing DNS—is documented in
    ./scripts/bootstrap_env.sh
    ```
 
-2. Start the full stack (API + Postgres + Redis + Ollama) in the background:
+2. Start the full stack (API + Postgres + Redis + Ollama + MinIO) in the background:
 
    ```bash
    ./scripts/dev_up.sh
@@ -313,14 +327,26 @@ modules live under `azt3knet.services` and expose:
    docker compose exec ollama ollama pull deepseek-r1:1.5b
    ```
 
-4. The API is now available at [http://localhost:8000](http://localhost:8000).
+4. (Optional) Create the S3 buckets required by the application using the
+   helper script once the MinIO container reports healthy:
+
+   ```bash
+   poetry run python scripts/setup_minio.py
+   ```
+
+   The script reads the same environment variables documented above and only
+   creates buckets that are missing. It relies on the
+   [`minio`](https://pypi.org/project/minio/) Python client; install the
+   dependency in your active environment if it is not already present.
+
+5. The API is now available at [http://localhost:8000](http://localhost:8000).
    To generate a preview population via the CLI inside the container, run:
 
    ```bash
    docker compose run --rm api azt3knet populate --gender female --count 10 --country MX --preview 3
    ```
 
-5. When finished, shut everything down and remove containers with:
+6. When finished, shut everything down and remove containers with:
 
    ```bash
    ./scripts/dev_down.sh
