@@ -177,6 +177,20 @@ class DeSECDNSManager:
         )
         self.upsert_rrset(rrset)
 
+    def upsert_cname(self, *, subname: str, target: str, ttl: int | None = None) -> None:
+        """Create or update a CNAME record for the managed domain."""
+
+        if not subname:
+            raise ValueError("subname must not be empty")
+        if not target:
+            raise ValueError("target must not be empty")
+
+        ttl = ttl or self._settings.default_ttl
+        record = target if target.endswith(".") else f"{target}."
+        rrset = RRSet(subname=subname, type="CNAME", records=[record], ttl=ttl)
+        logger.info("Upserting CNAME %s -> %s", subname, record)
+        self.upsert_rrset(rrset)
+
     # ------------------------------------------------------------------
     # DynDNS helpers
     # ------------------------------------------------------------------

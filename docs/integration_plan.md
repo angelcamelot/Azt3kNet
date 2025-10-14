@@ -23,6 +23,8 @@ Both the CLI and API should expose the flow end-to-end.
    - Implement `infra/dns_bootstrap.py` and `infra/dyn_updater.py` using the
      `dns_manager.py` client for deSEC.
    - Add cron/systemd-lite configuration to run `dyn_updater` on a schedule.
+   - Wire Cloudflare Tunnel CNAME management so the API can be exposed through
+     `cloudflared` while DNS stays on deSEC.
    - Write unit tests for `dns_manager` with `pytest` + `responses`.
 
 3. **LLM adapter and canonical models**

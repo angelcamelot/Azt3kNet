@@ -9,6 +9,7 @@ from typing import Callable, Sequence
 import httpx
 
 from azt3knet.core.mail_config import (
+    CloudflareTunnelSettings,
     DeSECSettings,
     MailProvisioningSettings,
     MailjetSettings,
@@ -23,6 +24,7 @@ def bootstrap_dns(
     mailjet_settings: MailjetSettings | None = None,
     provisioning_settings: MailProvisioningSettings | None = None,
     desec_settings: DeSECSettings | None = None,
+    cloudflare_settings: CloudflareTunnelSettings | None = None,
     mail_provisioner_factory: Callable[[MailjetSettings, MailProvisioningSettings], MailjetProvisioner]
     | None = None,
     dns_manager_factory: Callable[[DeSECSettings], DeSECDNSManager] | None = None,
@@ -34,6 +36,7 @@ def bootstrap_dns(
     mailjet_settings = mailjet_settings or MailjetSettings()
     provisioning_settings = provisioning_settings or MailProvisioningSettings()
     desec_settings = desec_settings or DeSECSettings()
+    cloudflare_settings = cloudflare_settings or CloudflareTunnelSettings()
     mail_provisioner_factory = mail_provisioner_factory or MailjetProvisioner
     dns_manager_factory = dns_manager_factory or DeSECDNSManager
 
@@ -58,6 +61,23 @@ def bootstrap_dns(
             a_record_ip=resolved_ip if resolved_ip else None,
         )
         dns_manager.update_dyndns(hostname=desec_settings.domain, ip_address=resolved_ip)
+
+        cname_target = cloudflare_settings.normalised_cname_target()
+        if cname_target:
+            subname = cloudflare_settings.cname_subdomain
+            if not subname:
+                hostname = cloudflare_settings.hostname
+                suffix = f".{desec_settings.domain}"
+                if hostname and hostname.endswith(suffix):
+                    subname = hostname[: -len(suffix)].rstrip(".") or "@"
+                elif hostname and hostname == desec_settings.domain:
+                    subname = "@"
+            subname = subname or "@"
+            dns_manager.upsert_cname(
+                subname=subname,
+                target=cname_target,
+                ttl=cloudflare_settings.cname_ttl or provisioning_settings.default_ttl,
+            )
 
     LOGGER.info("DNS bootstrap complete for domain %s", desec_settings.domain)
 
