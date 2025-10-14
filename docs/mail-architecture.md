@@ -1,30 +1,33 @@
 # Mail automation architecture
 
 This document describes how Azt3kNet provisions real mailboxes for every agent by
-combining **Mailcow** (self-hosted mail platform) with **deSEC** (DNSSEC-enabled
-DynDNS provider).
+combining **Mailjet** (cloud SMTP/API platform with inbound webhooks) with
+**deSEC** (DNSSEC-enabled DynDNS provider).
 
 ## Overview
 
 ```
 +-----------------+          +----------------------+          +------------------+
-| Azt3kNet Core   |  HTTPS   | Mailcow API          |  HTTPS   | deSEC API        |
-|  - agent model  +--------->+  /api/v1/add/mailbox +--------->+  /domains/...    |
-|  - orchestrator |          |  /get/dkim/<domain>  |          |  DynDNS          |
+| Azt3kNet Core   |  HTTPS   | Mailjet API          |  HTTPS   | deSEC API        |
+|  - agent model  +--------->+  /v3/REST/domain     +--------->+  /domains/...    |
+|  - orchestrator |          |  /v3/REST/inbound    |          |  DynDNS          |
 +-----------------+          +----------------------+          +------------------+
          |                            |                                  |
-         | SMTP/IMAP                  | generates DKIM                   |
+         | SMTP (API key)             | publishes DKIM/SPF               |
          v                            v                                  v
-   Agent mailbox <------------------- Mailcow stack <---------------- DNS records
+   Agent identity  <--------------- Mailjet SaaS  <---------------  DNS records
+         |                                                            (MX/SPF)
+         | HTTP webhook delivery                                       |
+         v                                                            v
+   Inbound processor -----------------------------------------> Azt3kNet events
 ```
 
-* Mailcow runs inside the Docker stack and exposes Postfix, Dovecot, Rspamd and
-  ACME automation. An API key allows Azt3kNet to manage domains, mailboxes and
-  app passwords.
+* Mailjet delivers outbound mail via authenticated SMTP/API calls and forwards
+  inbound messages to webhooks.
 * deSEC hosts the public DNS zone and offers a DynDNS endpoint to keep the
-  `dedyn.io` hostname pointing to the current residential IP address.
-* Azt3kNet modules orchestrate both systems to provide a first-class `@domain`
-  inbox per agent/bot.
+  `dedyn.io` hostname pointing to the current public IP address.
+* Azt3kNet modules orchestrate both systems to provide a first-class
+  `bot123@domain` identity per agent/bot.
 
 ## Configuration
 
@@ -36,27 +39,27 @@ values are:
 | --- | --- |
 | `DESEC_DOMAIN` | Base dedyn.io domain managed in deSEC |
 | `DESEC_TOKEN` | API token with RRset and DynDNS scopes |
-| `MAILCOW_API_KEY` | Mailcow API key for the provisioning account |
-| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when generating agent mailboxes |
-| `AZT3KNET_AGENT_MAIL_PASSWORD` | Shared password applied to every mailbox provisioned for agents |
+| `MAILJET_API_KEY` / `MAILJET_API_SECRET` | Mailjet API credentials used for SMTP/API authentication |
+| `MAILJET_MX_HOSTS` | Comma separated MX targets delegated to Mailjet (`in.mailjet.com`, `in-v3.mailjet.com`, ...)|
+| `MAILJET_SPF_INCLUDE` | SPF include directive published in DNS (`include:spf.mailjet.com` by default) |
+| `MAILJET_INBOUND_URL` | HTTPS endpoint that receives Mailjet inbound events |
+| `MAILJET_INBOUND_SECRET` | Optional shared secret validated on inbound webhook calls |
+| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when generating agent addresses |
 
 ## Runtime components
 
 ### Mail provisioning service
 
-The `MailcowProvisioner` class located in `azt3knet.services.mailcow_provisioner`
+The `MailjetProvisioner` class located in `azt3knet.services.mailjet_provisioner`
 wraps the REST API. It can:
 
-* ensure that the target domain exists
-* create a mailbox (`agent_<id>@domain`) with quota, rate limit and human-friendly
-  display name
-* generate and persist Mailcow app-passwords for SMTP/IMAP clients
-* optionally configure an outbound SMTP relay such as Sendgrid when direct port
-  25 access is unavailable
+* ensure that the sender domain exists in Mailjet and is ready for DKIM signing,
+* configure per-address inbound routes that forward messages to our webhook,
+* emit credentials (address + SMTP login) for the agent orchestration layer.
 
 ### Mailbox naming strategy
 
-Every agent receives a Mailcow mailbox following the format:
+Every agent receives a Mailjet identity following the format:
 
 ```
 <first>.<last>.<random3digits>.<timestamp>@<domain>
@@ -73,20 +76,19 @@ each population build.
 
 If a collision is detected while provisioning a batch (for example, thousands of
 agents sharing the exact same name generated on the same second), the builder
-retries up to 1,000 distinct deterministic combinations before raising an
-exception.
+retries up to 1,000 deterministic combinations before raising an exception.
 
 Minimal provisioning example:
 
 ```python
 from azt3knet.core.mail_config import (
     get_mail_provisioning_settings,
-    get_mailcow_settings,
+    get_mailjet_settings,
 )
-from azt3knet.services.mailcow_provisioner import MailcowProvisioner
+from azt3knet.services.mailjet_provisioner import MailjetProvisioner
 
-with MailcowProvisioner(
-    mailcow=get_mailcow_settings(),
+with MailjetProvisioner(
+    mailjet=get_mailjet_settings(),
     provisioning=get_mail_provisioning_settings(),
 ) as provisioner:
     creds = provisioner.create_agent_mailbox(
@@ -94,149 +96,91 @@ with MailcowProvisioner(
         display_name="Agent 427",
         apply_prefix=False,
     )
-    print(creds.address, creds.app_password)
+    print(creds.address, creds.smtp_username)
 ```
-
-Omitting the `password` parameter instructs the provisioner to use the shared
-value defined in `AZT3KNET_AGENT_MAIL_PASSWORD`. When set, that password becomes
-the IMAP/SMTP credential for every agent mailbox, simplifying downstream
-automation and credential rotation.
 
 ### DNS automation
 
 `DeSECDNSManager` automates RRset management and DynDNS updates via the deSEC
 API. It exposes helpers to:
 
-* bulk upsert MX, SPF, DKIM and DMARC records using Mailcow-generated keys
-* patch the `mail.<domain>` A record with the currently detected public IP
+* bulk upsert MX, SPF, DKIM and DMARC records using Mailjet-generated keys,
+* optionally maintain a `mail.<domain>` A record that points to the current
+  public IP (used by legacy tooling),
 * call `https://update.dedyn.io` with token authentication to refresh the
-  dynamic DNS assignment every 24 hours (configurable)
+  dynamic DNS assignment every 24 hours (configurable).
 
 The script `scripts/dns_bootstrap.py` ties both services together: it fetches the
-latest DKIM key from Mailcow, discovers the public IP, updates DNS RRsets and
+latest DKIM key from Mailjet, discovers the public IP, updates DNS RRsets and
 triggers a DynDNS refresh. This script is designed to run at container startup
 (via Docker entrypoint or cron).
 
 ### Mail access helper
 
-`MailService` is a lightweight SMTP/IMAP wrapper that converts the mailbox
-credentials into `email.message.EmailMessage` instances for sending and polling
-messages. It supports catch-all inbox processing and can be extended to integrate
-with the existing eventing system.
-
-## Docker integration
-
-Mailcow bootstrap assets live under `infra/docker/mailcow`. During installation:
-
-1. Run `./infra/docker/mailcow/bootstrap.sh` to clone the official
-   `mailcow/mailcow-dockerized` repository and generate configuration files that
-   point to `mail.<domain>`.
-2. Start the stack with `docker compose -f infra/docker/mailcow/docker-compose.mailcow.yml up -d`
-   (the helper script writes this file to wrap the upstream compose project).
-3. The `.env` variables expose Mailcow to the rest of the services.
-
-The main `docker-compose.yml` keeps Azt3kNet services decoupled; they reach
-Mailcow via the internal Docker network or public hostname depending on the
-deployment scenario.
+`MailService` is a lightweight SMTP wrapper that converts the mailbox
+credentials into `email.message.EmailMessage` instances for sending messages. It
+also includes helpers to validate inbound webhook tokens and to parse Mailjet
+payloads into structured `EmailMessage` objects for downstream processing.
 
 ## Installation guide
 
 ### Prerequisites
 
 - A public domain delegated to deSEC (for example `your-prefix.dedyn.io`).
-- Docker and Docker Compose installed on the host that will run Mailcow.
-- Ports 25/tcp, 80/tcp, 443/tcp, 587/tcp, and 993/tcp reachable from the
-  internet (forwarded if running behind a router).
+- A Mailjet account with access to the Transactional Email and Inbound routes.
+- HTTPS hosting for the inbound webhook endpoint (publicly reachable).
 - Python 3.11+ available locally to execute the helper scripts.
 
-### Install Mailcow
+### Configure Mailjet
 
-1. Copy `.env.example` to `.env` and set the Mailcow variables:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Provide at least `MAILCOW_API`, `MAILCOW_API_KEY`, `MAILCOW_SMTP_HOST`,
-   `MAILCOW_IMAP_HOST`, `MAILCOW_SMTP_PORT`, and `MAILCOW_IMAP_PORT`.
-
-2. Bootstrap the Mailcow project from the repository root. The Docker entrypoint
-   now performs this step automatically when the `api` service starts, but you
-   can still trigger it manually if running outside Docker:
-
-   ```bash
-   ./infra/docker/mailcow/bootstrap.sh
-   ```
-
-   The script clones the upstream `mailcow/mailcow-dockerized` repository
-   inside `infra/docker/mailcow/mailcow-dockerized` and generates configuration
-   files pointing to `mail.<your-domain>`.
-
-3. Start the Mailcow stack:
-
-   ```bash
-   docker compose -f infra/docker/mailcow/docker-compose.mailcow.yml up -d
-   ```
-
-   Wait until all containers report a `healthy` status (`docker compose ps`).
-
-4. Access the Mailcow UI at `https://mail.<your-domain>` and create the admin
-   account. Generate an API key with domain and mailbox permissions and copy it
-   to the `.env` file (`MAILCOW_API_KEY`).
-
-5. (Optional) Configure an outbound SMTP relay under **Configuration → Mail
-   Setup → Outgoing** if your ISP blocks port 25.
+1. Add your domain under **Account > Senders & Domains** in the Mailjet console
+   and follow the verification steps. You can skip MX/DKIM setup until the deSEC
+   integration below is complete.
+2. Generate an API key pair (one key/secret per environment) and store it in
+   `.env` as `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
+3. Determine the MX hosts assigned to your account. The defaults are
+   `in.mailjet.com` and `in-v3.mailjet.com`, but Mailjet may provide different
+   values. Populate `MAILJET_MX_HOSTS` accordingly.
+4. Create (or reuse) an inbound webhook endpoint within your infrastructure and
+   expose it publicly. Set `MAILJET_INBOUND_URL` to that URL and optionally set a
+   shared secret (`MAILJET_INBOUND_SECRET`).
 
 ### Configure deSEC DynDNS
 
 1. Create an account at [https://desec.io](https://desec.io) and add your
    hostname (for example `your-prefix.dedyn.io`). Enable DynDNS for the domain.
-
 2. Generate an API token with RRset read/write permissions and DynDNS access.
    Store it in `.env` as `DESEC_TOKEN`.
-
 3. Set `DESEC_DOMAIN` to the managed hostname (for example `your-prefix.dedyn.io`).
    Optionally override `DESEC_DYNDNS_UPDATE_URL` if you use a custom endpoint.
 
-4. Run the initial bootstrap once the Mailcow stack is ready:
+### Bootstrap DNS records
+
+1. Ensure `.env` contains the Mailjet and deSEC values described above.
+2. Run the bootstrap script locally or inside the Docker stack:
 
    ```bash
-   poetry run python infra/dns_bootstrap.py
+   poetry run python scripts/dns_bootstrap.py
    ```
 
-   The script will publish MX/SPF/DKIM/DMARC records based on the Mailcow
-   configuration and synchronize the public IP address.
+   The command will:
 
-5. Schedule the dynamic updater (inside the container or host) to refresh the
-   IP mapping:
+   - query Mailjet for the DKIM key associated with the domain,
+   - publish MX/SPF/DKIM/DMARC records via the deSEC API,
+   - update the dynamic DNS entry with the current public IP.
 
-   ```bash
-   poetry run python infra/dyn_updater.py
-   ```
+3. After DNS changes propagate, finalize the domain verification in the Mailjet
+   console. Mailjet should report successful DKIM/SPF checks.
 
-   When running inside Docker, add a cron job or systemd timer that executes the
-   command every few hours (the exact interval is controlled by
-   `DESEC_UPDATE_INTERVAL_HOURS`).
+### Provision agent identities
 
-## Operational workflows
+Invoke the CLI with the `--create-mailboxes` flag to provision Mailjet identities
+alongside the population preview:
 
-1. **Agent creation** – The orchestrator calls
-   `MailcowProvisioner.create_agent_mailbox(agent_id)` to create the mailbox and
-   persists the returned credentials. Immediately after creation the
-   `dns_bootstrap.py` script (or the scheduler) refreshes DKIM/SPF/TXT records.
-2. **Agent removal** – `delete_agent_mailbox` removes the mailbox and optionally
-   its aliases. DNS records remain intact unless explicitly removed.
-3. **DynDNS refresh** – A background job triggers `DeSECDNSManager.update_dyndns`
-   every `DESEC_UPDATE_INTERVAL_HOURS` hours to keep the IP mapping current.
-4. **Inbound processing** – `MailService.fetch_unseen` powers polling loops or
-   IMAP IDLE listeners that feed incoming messages to the simulation engine.
+```bash
+poetry run azt3knet populate --count 5 --country ES --create-mailboxes
+```
 
-## Security notes
-
-* API tokens and app-passwords are injected via environment variables—never
-  commit them to the repository.
-* Mailcow TLS certificates are handled automatically by ACME; only SMTP SUBMISSION
-  (587/465) and IMAP (993) need to be exposed through the firewall.
-* Rate limits and quotas guard against runaway agents.
-* DKIM/SPF/DMARC enforcement happens before any outbound traffic is sent.
-
+The command prints both the generated agents and their corresponding SMTP
+credentials. Inbound routes are automatically created for each new address and
+point to the webhook configured via `MAILJET_INBOUND_URL`.

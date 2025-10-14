@@ -29,7 +29,7 @@ def populate(
     age_range: Optional[str] = typer.Option(None, help="Age range e.g. 18-30"),
     interests: Optional[str] = typer.Option(None, help="Comma separated interests"),
     seed: Optional[str] = typer.Option(None, help="Deterministic seed"),
-    create_mailboxes: bool = typer.Option(False, help="Provision Mailcow mailboxes"),
+    create_mailboxes: bool = typer.Option(False, help="Provision Mailjet mailboxes"),
     preview: Optional[int] = typer.Option(None, help="Limit the preview to N agents"),
     persist: bool = typer.Option(False, help="Persist generated agents to storage"),
     database_url: Optional[str] = typer.Option(

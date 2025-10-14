@@ -7,7 +7,7 @@ import pathlib
 
 import httpx
 
-from azt3knet.services import DeSECDNSManager, MailcowProvisioner, ResilientHTTPClient
+from azt3knet.services import DeSECDNSManager, MailjetProvisioner, ResilientHTTPClient
 
 _MODULE_PATH = pathlib.Path(__file__).resolve().parents[1].parent / "infra" / "dns_bootstrap.py"
 _SPEC = importlib.util.spec_from_file_location("infra_dns_bootstrap", _MODULE_PATH)
@@ -20,11 +20,11 @@ def _make_mail_factory(handler):
     def factory(mail_settings, provisioning_settings):
         client = httpx.Client(
             base_url=mail_settings.base_url,
-            headers={"X-API-Key": mail_settings.api_key},
+            auth=(mail_settings.api_key, mail_settings.api_secret),
             transport=httpx.MockTransport(handler),
         )
-        resilient = ResilientHTTPClient(client, service_name="mailcow")
-        return MailcowProvisioner(mail_settings, provisioning_settings, client=resilient)
+        resilient = ResilientHTTPClient(client, service_name="mailjet")
+        return MailjetProvisioner(mail_settings, provisioning_settings, client=resilient)
 
     return factory
 
@@ -43,8 +43,13 @@ def _make_dns_factory(api_handler, dyn_handler):
 
 
 def _set_common_env(monkeypatch):
-    monkeypatch.setenv("MAILCOW_API", "https://mail.example/api")
-    monkeypatch.setenv("MAILCOW_API_KEY", "secret")
+    monkeypatch.setenv("MAILJET_API", "https://api.mailjet.test")
+    monkeypatch.setenv("MAILJET_API_KEY", "public")
+    monkeypatch.setenv("MAILJET_API_SECRET", "secret")
+    monkeypatch.setenv("MAILJET_SMTP_HOST", "in-v3.mailjet.com")
+    monkeypatch.setenv("MAILJET_SMTP_PORT", "587")
+    monkeypatch.setenv("MAILJET_MX_HOSTS", "in.mailjet.com,in-v3.mailjet.com")
+    monkeypatch.setenv("MAILJET_SPF_INCLUDE", "include:spf.mailjet.com")
     monkeypatch.setenv("AZT3KNET_DOMAIN", "example.com")
     monkeypatch.setenv("DESEC_API", "https://desec.example/api/v1")
     monkeypatch.setenv("DESEC_DOMAIN", "example.com")
@@ -62,16 +67,11 @@ def test_bootstrap_dns_happy_path(monkeypatch):
     def mail_handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         mail_requests.append((request.method, path))
-        if request.method == "GET" and path.endswith("/get/domain/all"):
-            assert path == "/api/get/domain/all"
-            return httpx.Response(200, json=[])
-        if request.method == "POST" and path.endswith("/add/domain"):
-            assert path == "/api/add/domain"
-            return httpx.Response(200, json={"status": "created"})
-        if request.method == "GET" and path.endswith("/get/dkim/example.com"):
-            assert path == "/api/get/dkim/example.com"
-            return httpx.Response(200, json={"public": "v=DKIM1"})
-        raise AssertionError(f"Unexpected Mailcow request: {request.method} {request.url}")
+        if request.method == "GET" and path == "/v3/REST/domain/example.com":
+            return httpx.Response(200, json={"DKIMPublicKey": "v=DKIM1"})
+        if request.method == "POST" and path == "/v3/REST/inbound":
+            return httpx.Response(200, json={"status": "ok"})
+        raise AssertionError(f"Unexpected Mailjet request: {request.method} {request.url}")
 
     def dns_handler(request: httpx.Request) -> httpx.Response:
         dns_requests.append(
@@ -96,9 +96,8 @@ def test_bootstrap_dns_happy_path(monkeypatch):
         dns_manager_factory=_make_dns_factory(dns_handler, dyn_handler),
     )
 
-    assert any(method == "GET" and path == "/api/get/domain/all" for method, path in mail_requests)
-    assert any(method == "POST" and path == "/api/add/domain" for method, path in mail_requests)
-    assert any(method == "GET" and path == "/api/get/dkim/example.com" for method, path in mail_requests)
+    assert any(method == "GET" and path == "/v3/REST/domain/example.com" for method, path in mail_requests)
+    assert any(method == "POST" and path == "/v3/REST/inbound" for method, path in mail_requests)
 
     assert len(dns_requests) == 1
     method, path, body = dns_requests[0]
@@ -108,6 +107,8 @@ def test_bootstrap_dns_happy_path(monkeypatch):
     rr_counter = Counter(item["type"] for item in body)
     assert rr_counter["MX"] == 1
     assert rr_counter["TXT"] == 3
+    mx_record = next(item for item in body if item["type"] == "MX")
+    assert mx_record["records"] == ["10 in.mailjet.com.", "20 in-v3.mailjet.com."]
 
     assert dyn_requests[0][0] == "api.ipify.org"
     assert dyn_requests[1][0] == "update.example"
@@ -117,14 +118,11 @@ def test_main_returns_status_error_code(monkeypatch):
     _set_common_env(monkeypatch)
 
     def mail_handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        if request.method == "GET" and path.endswith("/get/domain/all"):
-            return httpx.Response(200, json=[])
-        if request.method == "POST" and path.endswith("/add/domain"):
+        if request.method == "GET" and request.url.path == "/v3/REST/domain/example.com":
+            return httpx.Response(200, json={"DKIMPublicKey": "v=DKIM1"})
+        if request.method == "POST" and request.url.path == "/v3/REST/inbound":
             return httpx.Response(200, json={})
-        if request.method == "GET" and path.endswith("/get/dkim/example.com"):
-            return httpx.Response(200, json={"public": "v=DKIM1"})
-        raise AssertionError(f"Unexpected Mailcow request: {request.method} {request.url}")
+        raise AssertionError(f"Unexpected Mailjet request: {request.method} {request.url}")
 
     def dns_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, json={"detail": "oops"})
@@ -134,7 +132,7 @@ def test_main_returns_status_error_code(monkeypatch):
             return httpx.Response(200, json={"ip": "198.51.100.42"})
         raise AssertionError("DynDNS update should not be attempted on failure")
 
-    monkeypatch.setattr(dns_bootstrap, "MailcowProvisioner", _make_mail_factory(mail_handler))
+    monkeypatch.setattr(dns_bootstrap, "MailjetProvisioner", _make_mail_factory(mail_handler))
     monkeypatch.setattr(dns_bootstrap, "DeSECDNSManager", _make_dns_factory(dns_handler, dyn_handler))
 
     assert dns_bootstrap.main() == 2
@@ -144,14 +142,11 @@ def test_main_returns_transport_error_code(monkeypatch):
     _set_common_env(monkeypatch)
 
     def mail_handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        if request.method == "GET" and path.endswith("/get/domain/all"):
-            return httpx.Response(200, json=[])
-        if request.method == "POST" and path.endswith("/add/domain"):
+        if request.method == "GET" and request.url.path == "/v3/REST/domain/example.com":
+            return httpx.Response(200, json={"DKIMPublicKey": "v=DKIM1"})
+        if request.method == "POST" and request.url.path == "/v3/REST/inbound":
             return httpx.Response(200, json={})
-        if request.method == "GET" and path.endswith("/get/dkim/example.com"):
-            return httpx.Response(200, json={"public": "v=DKIM1"})
-        raise AssertionError(f"Unexpected Mailcow request: {request.method} {request.url}")
+        raise AssertionError(f"Unexpected Mailjet request: {request.method} {request.url}")
 
     def dns_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom", request=request)
@@ -161,7 +156,7 @@ def test_main_returns_transport_error_code(monkeypatch):
             return httpx.Response(200, json={"ip": "198.51.100.42"})
         raise AssertionError("DynDNS update should not be attempted on failure")
 
-    monkeypatch.setattr(dns_bootstrap, "MailcowProvisioner", _make_mail_factory(mail_handler))
+    monkeypatch.setattr(dns_bootstrap, "MailjetProvisioner", _make_mail_factory(mail_handler))
     monkeypatch.setattr(dns_bootstrap, "DeSECDNSManager", _make_dns_factory(dns_handler, dyn_handler))
 
     assert dns_bootstrap.main() == 3

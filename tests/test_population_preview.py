@@ -13,7 +13,7 @@ from azt3knet.population.builder import (
     _mailbox_local_part_for_agent,
     build_population,
 )
-from azt3knet.services.mailcow_provisioner import MailboxCredentials
+from azt3knet.services.mailjet_provisioner import MailboxCredentials
 
 
 class StubLLM(LLMAdapter):
@@ -24,7 +24,7 @@ class StubLLM(LLMAdapter):
 
 
 class StubProvisioner:
-    """In-memory Mailcow provisioner used to avoid network calls."""
+    """In-memory Mailjet provisioner used to avoid network calls."""
 
     def __init__(self) -> None:
         self.created: list[dict[str, object]] = []
@@ -38,25 +38,21 @@ class StubProvisioner:
         agent_id: str,
         *,
         display_name: str | None = None,
-        password: str | None = None,
-        quota_mb: int | None = None,
         apply_prefix: bool = True,
     ) -> MailboxCredentials:
         self.created.append({
             "agent_id": agent_id,
             "apply_prefix": apply_prefix,
-            "password": password,
         })
-        resolved_password = "example-password" if password is None else password
         local_part = f"agent_{agent_id}" if apply_prefix else agent_id
         return MailboxCredentials(
             address=f"{local_part}@example.org",
-            password=resolved_password,
-            app_password="example-app-pass",
             smtp_host="smtp.example.org",
             smtp_port=587,
-            imap_host="imap.example.org",
-            imap_port=993,
+            smtp_username="api-key",
+            smtp_password="api-secret",
+            inbound_url="https://example.org/inbound",
+            inbound_secret="token",
         )
 
     def close(self) -> None:
@@ -75,7 +71,7 @@ def test_build_population_preview_without_mailboxes() -> None:
 
 
 def test_build_population_with_mailboxes(monkeypatch) -> None:
-    """Mailboxes are provisioned via the provided Mailcow stub."""
+    """Mailboxes are provisioned via the provided Mailjet stub."""
 
     spec = PopulationSpec(count=2, country="US", seed="mail-seed")
     provisioner = StubProvisioner()

@@ -19,7 +19,7 @@ Azt3kNet is a research-oriented Python system that models networks of digital ag
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md         # Deep dive into the proposed architecture
-│   ├── mail-architecture.md    # Mailcow + deSEC automation plan
+│   ├── mail-architecture.md    # Mailjet + deSEC automation plan
 │   ├── ADRs/                   # Architecture decision records
 │   └── diagrams/               # Component/flow diagrams
 ├── infra/
@@ -254,7 +254,7 @@ stack. The tables below document every variable that the application consumes.
 | `OLLAMA_MODEL` | Default Ollama model tag used for generations. |
 | `OLLAMA_TIMEOUT` | Request timeout (seconds) for Ollama calls. |
 
-### Mail automation (Mailcow + deSEC)
+### Mail automation (Mailjet + deSEC)
 
 | Variable | Description |
 | --- | --- |
@@ -263,20 +263,17 @@ stack. The tables below document every variable that the application consumes.
 | `DESEC_TOKEN` | API token with RRset and DynDNS scopes (**secret**). |
 | `DESEC_DYNDNS_UPDATE_URL` | Endpoint used for periodic DynDNS refreshes. |
 | `DESEC_UPDATE_INTERVAL_HOURS` | Interval between DynDNS updates. |
-| `MAILCOW_API` | Base URL for the Mailcow API. |
-| `MAILCOW_API_KEY` | Mailcow API key with domain/mailbox permissions (**secret**). |
-| `MAILCOW_SMTP_HOST` / `MAILCOW_SMTP_PORT` | SMTP endpoint exposed by Mailcow. |
-| `MAILCOW_IMAP_HOST` / `MAILCOW_IMAP_PORT` | IMAP endpoint exposed by Mailcow. |
-| `MAILCOW_RELAY_HOST` / `MAILCOW_RELAY_PORT` | Optional outbound SMTP relay configuration. |
-| `MAILCOW_RELAY_USER` / `MAILCOW_RELAY_PASS` | Credentials for the relay (**secret**, optional). |
-| `MAILCOW_VERIFY_TLS` | Enforce TLS certificate validation when connecting to Mailcow. |
+| `MAILJET_API` | Base URL for the Mailjet API. |
+| `MAILJET_API_KEY` / `MAILJET_API_SECRET` | API credentials for SMTP/API access (**secret**). |
+| `MAILJET_SMTP_HOST` / `MAILJET_SMTP_PORT` | SMTP endpoint exposed by Mailjet. |
+| `MAILJET_SMTP_USER` / `MAILJET_SMTP_PASS` | Optional SMTP overrides (defaults to API key/secret). |
+| `MAILJET_MX_HOSTS` | Comma separated list of MX targets delegated to Mailjet. |
+| `MAILJET_SPF_INCLUDE` | SPF include directive published in DNS (default `include:spf.mailjet.com`). |
+| `MAILJET_INBOUND_URL` | Webhook URL invoked by Mailjet for inbound messages. |
+| `MAILJET_INBOUND_SECRET` | Optional shared secret validated on inbound requests. |
 | `AZT3KNET_DOMAIN` | Base domain appended to generated agent mailboxes. |
 | `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when constructing mailbox addresses (legacy flows). |
-| `AZT3KNET_AGENT_MAIL_PASSWORD` | Password assigned to every auto-provisioned agent mailbox (**secret**). |
-| `AZT3KNET_MAIL_QUOTA_MB` | Mailbox quota (MiB) enforced during provisioning. |
-| `AZT3KNET_MAIL_TTL` | Default credential TTL when issuing temporary passwords. |
-| `AZT3KNET_MAIL_RATE_LIMIT` | Maximum outbound messages per agent mailbox. |
-| `AZT3KNET_AUTO_BOOTSTRAP_MAILCOW` | When set to `1`, the Docker entrypoint clones Mailcow assets automatically. |
+| `AZT3KNET_MAIL_TTL` | Default TTL applied to DNS records. |
 
 The mail automation workflow—including concrete examples for provisioning
 mailboxes and syncing DNS—is documented in
@@ -321,17 +318,18 @@ mailboxes and syncing DNS—is documented in
 
 ## ✉️ Mail infrastructure
 
-The project ships with a full automation layer for Mailcow (mail server) and
-deSEC (DNSSEC-enabled dynamic DNS). Review [`docs/mail-architecture.md`](docs/mail-architecture.md)
-for the detailed blueprint, environment variables and bootstrap scripts. Core
-modules live under `azt3knet.services` and expose:
+Azt3kNet integrates Mailjet (SMTP/API delivery and inbound webhooks) with
+deSEC (DNSSEC-enabled dynamic DNS). Review
+[`docs/mail-architecture.md`](docs/mail-architecture.md) for the detailed
+blueprint, environment variables and bootstrap scripts. Core modules live under
+`azt3knet.services` and expose:
 
-* `MailcowProvisioner` – REST client that creates/updates agent mailboxes and
-  app-passwords.
+* `MailjetProvisioner` – REST client that registers sender domains, provisions
+  logical agent mailboxes, and configures inbound routes.
 * `DeSECDNSManager` – ensures MX/SPF/DKIM/DMARC records exist and keeps DynDNS
   assignments fresh.
-* `MailService` – SMTP/IMAP convenience wrapper to send and fetch emails per
-  agent.
+* `MailService` – SMTP convenience wrapper to send emails plus helpers to
+  validate and parse Mailjet inbound webhook payloads.
 
 3. Pull the Ollama model the first time you run the stack (replace
    `deepseek-r1:1.5b` with the value you configured in `infra/docker/.env`):

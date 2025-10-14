@@ -3,44 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from email import message_from_bytes, policy
+from email import message_from_string, policy
 from email.message import EmailMessage
-import imaplib
 import logging
 import smtplib
-from typing import Iterable, List, Sequence, cast
+from typing import Mapping, Sequence, cast
 
-from azt3knet.services.mailcow_provisioner import MailboxCredentials
+from azt3knet.services.mailjet_provisioner import MailboxCredentials
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class AgentMailbox:
-    """Runtime representation of an agent mailbox."""
+    """Runtime representation of a Mailjet-backed agent mailbox."""
 
     address: str
-    password: str
     smtp_host: str
     smtp_port: int
-    imap_host: str
-    imap_port: int
-    app_password: str | None = None
+    smtp_username: str
+    smtp_password: str
+    inbound_url: str | None = None
+    inbound_secret: str | None = None
 
     @classmethod
     def from_credentials(cls, credentials: MailboxCredentials) -> "AgentMailbox":
         return cls(
             address=credentials.address,
-            password=credentials.password,
             smtp_host=credentials.smtp_host,
             smtp_port=credentials.smtp_port,
-            imap_host=credentials.imap_host,
-            imap_port=credentials.imap_port,
-            app_password=credentials.app_password,
+            smtp_username=credentials.smtp_username,
+            smtp_password=credentials.smtp_password,
+            inbound_url=credentials.inbound_url,
+            inbound_secret=credentials.inbound_secret,
         )
-
-    def auth_secret(self) -> str:
-        return self.app_password or self.password
 
 
 class MailService:
@@ -70,39 +66,37 @@ class MailService:
         logger.debug("Sending email from %s to %s", mailbox.address, recipients)
         with smtplib.SMTP(mailbox.smtp_host, mailbox.smtp_port) as client:
             client.starttls()
-            client.login(mailbox.address, mailbox.auth_secret())
+            client.login(mailbox.smtp_username, mailbox.smtp_password)
             client.send_message(message)
 
-    def fetch_unseen(self, mailbox: AgentMailbox, *, folder: str = "INBOX") -> list[EmailMessage]:
-        """Fetch unseen messages from the mailbox."""
+    def validate_inbound_token(self, mailbox: AgentMailbox, token: str | None) -> bool:
+        """Return True when the provided webhook token matches the mailbox secret."""
 
-        logger.debug("Fetching unseen messages for %s", mailbox.address)
-        with imaplib.IMAP4_SSL(mailbox.imap_host, mailbox.imap_port) as client:
-            client.login(mailbox.address, mailbox.auth_secret())
-            client.select(folder)
-            status, data = client.search(None, "UNSEEN")
-            if status != "OK":
-                raise RuntimeError(f"IMAP search failed for {mailbox.address}: {status}")
+        if not mailbox.inbound_secret:
+            return True
+        return token == mailbox.inbound_secret
 
-            message_ids = data[0].split()
-            messages: List[EmailMessage] = []
-            for message_id in message_ids:
-                fetch_status, message_data = client.fetch(message_id, "(RFC822)")
-                if fetch_status != "OK" or not message_data:
-                    continue
-                raw = message_data[0][1]
-                if raw:
-                    messages.append(
-                        cast(EmailMessage, message_from_bytes(raw, policy=policy.default))
-                    )
-            return messages
+    def parse_inbound_event(self, payload: Mapping[str, object]) -> EmailMessage:
+        """Convert a Mailjet inbound webhook payload into an ``EmailMessage``."""
 
-    def mark_seen(self, mailbox: AgentMailbox, uids: Iterable[bytes], *, folder: str = "INBOX") -> None:
-        """Mark the provided message UIDs as seen."""
+        raw_message = payload.get("RawMessage")
+        if isinstance(raw_message, str) and raw_message.strip():
+            return cast(EmailMessage, message_from_string(raw_message, policy=policy.default))
 
-        with imaplib.IMAP4_SSL(mailbox.imap_host, mailbox.imap_port) as client:
-            client.login(mailbox.address, mailbox.auth_secret())
-            client.select(folder)
-            for uid in uids:
-                client.store(uid, "+FLAGS", "(\\Seen)")
+        headers = payload.get("Headers")
+        text_part = payload.get("Text-part")
+        html_part = payload.get("Html-part")
+
+        message = EmailMessage(policy=policy.default)
+        if isinstance(headers, Mapping):
+            for key, value in headers.items():
+                if isinstance(key, str) and isinstance(value, str):
+                    message[key] = value
+        if isinstance(text_part, str) and text_part.strip():
+            message.set_content(text_part)
+        elif isinstance(html_part, str) and html_part.strip():
+            message.set_content(html_part, subtype="html")
+        else:
+            message.set_content("")
+        return message
 
