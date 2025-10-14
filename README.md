@@ -301,7 +301,7 @@ mailboxes and syncing DNS—is documented in
    ./scripts/dev_up.sh
    ```
 
-   The default Postgres image is `ankane/pgvector:pg16`, which enables the
+   The default Postgres image is `pgvector/pgvector:pg16`, which enables the
    `vector` extension automatically. To opt into TimescaleDB set the
    following overrides in `.env` and `infra/docker/.env` before running the
    script:
