@@ -3,7 +3,7 @@
 This directory contains Docker resources that make it easy to spin up
 the local dependencies required by Azt3kNet:
 
-- **Postgres 15** for the primary persistence layer.
+- **Postgres 16** for the primary persistence layer with the `pgvector` extension.
 - **Redis 7** for background job queues.
 - **Ollama** for local LLM inference with reproducible prompts.
 
@@ -33,3 +33,34 @@ Ollama models between restarts.
 > **Tip:** The repository root now includes a `docker-compose.yml` that
 > builds and runs the FastAPI surface together with these dependencies.
 > Use `./scripts/dev_up.sh` to start the full stack in one command.
+
+## Postgres extensions and TimescaleDB
+
+- `infra/docker/postgres-init/00-enable-vector.sql` runs on first boot to
+  execute `CREATE EXTENSION IF NOT EXISTS vector;` so the embeddings
+  extension is always available.
+- `infra/docker/postgres-init/01-enable-timescaledb.sh` runs when
+  `POSTGRES_ENABLE_TIMESCALEDB=true` to execute
+  `CREATE EXTENSION IF NOT EXISTS timescaledb;`. Combine it with the
+  TimescaleDB image when you need hypertables or continuous aggregates.
+
+To opt-in to TimescaleDB replace the image and enable the flag in
+`infra/docker/.env` before starting the stack:
+
+```env
+POSTGRES_IMAGE=timescale/timescaledb-ha:pg16
+POSTGRES_ENABLE_TIMESCALEDB=true
+TIMESCALEDB_MAX_MEMORY=1GB
+```
+
+The `infra/docker/postgres-init/02-configure-memory.sh` helper appends the
+requested `shared_buffers` and optional `timescaledb.max_memory` settings
+to `postgresql.conf` during initialisation. Adjust the defaults in
+`infra/docker/.env` to match your workstation resources.
+
+## Migration note
+
+Upgrading from Postgres 15 to Postgres 16 changes the on-disk format. Stop
+containers, back up your data, and recreate the `postgres-data` volume if
+you previously ran the old image. Developers using `scripts/dev_up.sh`
+should run `docker compose down --volumes` once to avoid version conflicts.

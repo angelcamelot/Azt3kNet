@@ -2,16 +2,20 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-ankane/pgvector:pg16}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-azt3knet}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-azt3knet}
       POSTGRES_DB: ${POSTGRES_DB:-azt3knet}
+      POSTGRES_ENABLE_TIMESCALEDB: ${POSTGRES_ENABLE_TIMESCALEDB:-false}
+      POSTGRES_SHARED_BUFFERS: ${POSTGRES_SHARED_BUFFERS:-256MB}
+      TIMESCALEDB_MAX_MEMORY: ${TIMESCALEDB_MAX_MEMORY:-512MB}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-azt3knet} -d ${POSTGRES_DB:-azt3knet}"]
       interval: 5s
