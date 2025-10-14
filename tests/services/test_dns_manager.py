@@ -4,120 +4,127 @@ import json
 
 import httpx
 
-from azt3knet.core.mail_config import DeSECSettings
-from azt3knet.services.dns_manager import DeSECDNSManager
+from azt3knet.core.mail_config import CloudflareDNSSettings
+from azt3knet.services.dns_manager import CloudflareDNSManager, DNSRecord
 
 
-def test_bootstrap_mail_records_uses_bulk_upsert(monkeypatch) -> None:
-    settings = DeSECSettings(
-        api_base="https://desec.example/api/v1",
-        domain="example.com",
-        token="token",
-        dyndns_update_url="https://update.example",
-        update_interval_hours=24,
-        default_ttl=300,
+def _make_settings() -> CloudflareDNSSettings:
+    return CloudflareDNSSettings(
+        api_base="https://api.cloudflare.test/client/v4",
+        api_token="token",
+        zone_id="zone-123",
+        zone_name="example.com",
+        default_ttl=600,
     )
 
-    captured: dict[str, object] = {}
+
+def test_bootstrap_mail_records_creates_cloudflare_requests() -> None:
+    requests: list[tuple[str, str, object | None]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured["method"] = request.method
-        captured["path"] = request.url.path
-        captured["json"] = json.loads(request.content.decode())
-        return httpx.Response(200, json={})
+        payload: object | None = None
+        if request.content:
+            payload = json.loads(request.content.decode())
+        requests.append((request.method, request.url.path, payload))
+        if request.method == "GET":
+            return httpx.Response(200, json={"success": True, "result": []})
+        return httpx.Response(200, json={"success": True, "result": {"id": "rec"}})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/"))
-    dns = DeSECDNSManager(settings, client=client, dyn_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    settings = _make_settings()
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base)
+    manager = CloudflareDNSManager(settings, client=client)
 
-    dns.bootstrap_mail_records(
-        mx_records=("mail.example.com",),
-        dkim_key="v=DKIM1",
-        ttl=300,
-        a_record_host="mail",
-        a_record_ip="1.2.3.4",
+    manager.bootstrap_mail_records(
+        mx_records=("in.mailjet.com", "in-v3.mailjet.com"),
+        dkim_key="v=DKIM1; p=abc",
+        ttl=900,
+        spf_policy="v=spf1 include:spf.mailjet.com -all",
+        dmarc_policy="v=DMARC1; p=quarantine",
     )
 
-    assert captured["method"] == "PATCH"
-    assert captured["path"] == "/api/v1/domains/example.com/rrsets/"
-    payload = captured["json"]
-    assert isinstance(payload, list)
-    assert len(payload) == 5
-    rr_types = {item["type"] for item in payload}
-    assert rr_types == {"MX", "A", "TXT"}
-
-
-def test_update_dyndns_returns_response_text(monkeypatch) -> None:
-    settings = DeSECSettings(
-        api_base="https://desec.example/api/v1",
-        domain="example.com",
-        token="token",
-        dyndns_update_url="https://update.example",
-        update_interval_hours=24,
-        default_ttl=300,
+    post_payloads = [payload for method, _, payload in requests if method == "POST"]
+    assert any(payload["type"] == "MX" and payload["priority"] == 10 for payload in post_payloads)
+    assert any(payload["type"] == "MX" and payload["priority"] == 20 for payload in post_payloads)
+    assert any(
+        payload["type"] == "TXT" and str(payload.get("name", "")).endswith("_dmarc.example.com")
+        for payload in post_payloads
     )
+    assert any(payload["type"] == "TXT" and payload["content"].startswith("v=spf1") for payload in post_payloads)
+    assert any(payload["type"] == "TXT" and payload["name"].endswith("mail._domainkey.example.com") for payload in post_payloads)
+
+
+def test_upsert_cname_updates_existing_record() -> None:
+    requests: list[tuple[str, str, object | None]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if "update" in request.url.host:
-            return httpx.Response(200, text="good 1.2.3.4")
-        return httpx.Response(200, json=[])
+        payload: object | None = None
+        if request.content:
+            payload = json.loads(request.content.decode())
+        requests.append((request.method, request.url.path, payload))
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "result": [
+                        {
+                            "id": "rec-1",
+                            "type": "CNAME",
+                            "name": "api.example.com",
+                            "content": "old.target",
+                            "ttl": 300,
+                            "proxied": False,
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(200, json={"success": True, "result": {"id": "rec-1"}})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/"))
-    dyn_client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = _make_settings()
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base)
+    manager = CloudflareDNSManager(settings, client=client)
 
-    dns = DeSECDNSManager(settings, client=client, dyn_client=dyn_client)
-    assert dns.update_dyndns(hostname="example.com", ip_address="1.2.3.4") == "good 1.2.3.4"
+    manager.upsert_cname(subname="api", target="new.target")
 
-
-def test_lookup_public_ip_parses_json() -> None:
-    settings = DeSECSettings(
-        api_base="https://desec.example/api/v1",
-        domain="example.com",
-        token="token",
-        dyndns_update_url="https://update.example",
-        update_interval_hours=24,
-        default_ttl=300,
-    )
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ip": "203.0.113.10"})
-
-    dns = DeSECDNSManager(
-        settings,
-        client=httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/")),
-        dyn_client=httpx.Client(transport=httpx.MockTransport(handler)),
-    )
-
-    assert dns.lookup_public_ip() == "203.0.113.10"
+    methods = [method for method, _, _ in requests]
+    assert "POST" in methods
+    assert "DELETE" in methods
 
 
-def test_upsert_cname_appends_trailing_dot() -> None:
-    settings = DeSECSettings(
-        api_base="https://desec.example/api/v1",
-        domain="example.com",
-        token="token",
-        dyndns_update_url="https://update.example",
-        update_interval_hours=24,
-        default_ttl=300,
-    )
-
-    captured: dict[str, object] = {}
+def test_replace_records_removes_outdated_records() -> None:
+    delete_calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured["method"] = request.method
-        captured["path"] = request.url.path
-        captured["json"] = json.loads(request.content.decode())
-        return httpx.Response(200, json={})
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "result": [
+                        {
+                            "id": "rec-1",
+                            "type": "MX",
+                            "name": "example.com",
+                            "content": "old.mailjet.com",
+                            "ttl": 300,
+                            "priority": 10,
+                        }
+                    ],
+                },
+            )
+        if request.method == "DELETE":
+            delete_calls.append(str(request.url))
+            return httpx.Response(200, json={"success": True, "result": None})
+        return httpx.Response(200, json={"success": True, "result": {"id": "rec-2"}})
 
-    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/"))
-    dns = DeSECDNSManager(settings, client=client, dyn_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    settings = _make_settings()
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base)
+    manager = CloudflareDNSManager(settings, client=client)
 
-    dns.upsert_cname(subname="api", target="abcd1234.cfargotunnel.com", ttl=600)
+    manager.replace_records(
+        name="@",
+        rtype="MX",
+        records=[DNSRecord(content="in.mailjet.com", ttl=600, priority=10)],
+    )
 
-    assert captured["method"] == "PUT"
-    assert captured["path"] == "/api/v1/domains/example.com/rrsets/CNAME/api/"
-    assert captured["json"] == {
-        "subname": "api",
-        "type": "CNAME",
-        "records": ["abcd1234.cfargotunnel.com."],
-        "ttl": 600,
-    }
+    assert delete_calls, "Expected outdated record to be deleted"

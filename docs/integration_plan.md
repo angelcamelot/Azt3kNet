@@ -1,10 +1,10 @@
-# Azt3kNet + deSEC + Mailjet Integration Plan
+# Azt3kNet + Cloudflare + Mailjet Integration Plan
 
 ## Overview
 
 Deliver a deterministic pipeline that generates synthetic populations with full
 digital identities, provisions Mailjet-backed mailboxes, and manages DNS via
-deSEC. Both the CLI and API should expose the flow end-to-end.
+Cloudflare. Both the CLI and API should expose the flow end-to-end.
 Both the CLI and API should expose the flow end-to-end.
 
 ## Commit strategy
@@ -19,13 +19,12 @@ Both the CLI and API should expose the flow end-to-end.
    - Wire the DNS bootstrap service into the Docker stack so Mailjet DNS records
      stay synchronized.
 
-2. **DNS bootstrap and dynamic updates**
-   - Implement `infra/dns_bootstrap.py` and `infra/dyn_updater.py` using the
-     `dns_manager.py` client for deSEC.
-   - Add cron/systemd-lite configuration to run `dyn_updater` on a schedule.
-   - Wire Cloudflare Tunnel CNAME management so the API can be exposed through
-     `cloudflared` while DNS stays on deSEC.
-   - Write unit tests for `dns_manager` with `pytest` + `responses`.
+2. **DNS bootstrap and Cloudflare integration**
+   - Implement `infra/dns_bootstrap.py` using the Cloudflare DNS client.
+   - Ensure Cloudflare Tunnel CNAME management is part of the bootstrap flow so
+     the API can be exposed through `cloudflared` without a public IP.
+   - Write unit tests for `dns_manager` with `pytest` + `responses` (or
+     `httpx.MockTransport`).
 
 3. **LLM adapter and canonical models**
    - Implement `src/azt3knet/llm/adapter.py` with the deterministic
@@ -69,7 +68,6 @@ Both the CLI and API should expose the flow end-to-end.
 
 - `docs/integration_plan.md` (this document).
 - `infra/dns_bootstrap.py` (initial skeleton with TODOs).
-- `infra/dyn_updater.py` (skeleton).
 - `src/azt3knet/dns/dns_manager.py` (placeholder class/interfaces).
 - `src/azt3knet/llm/adapter.py` (stub for `generate_field`).
 - `src/azt3knet/agent_factory/models.py` (shared dataclasses for agents).
