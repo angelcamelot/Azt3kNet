@@ -203,6 +203,10 @@ stack. The tables below document every variable that the application consumes.
 | `DATABASE_URL` | SQLAlchemy URL for the primary database (contains credentials). |
 | `SQLITE_URL` | Local fallback database connection string. |
 | `ALEMBIC_CONFIG` | Relative path to the Alembic configuration file. |
+| `POSTGRES_IMAGE` | Docker image used by the compose files (defaults to Postgres 16 with `pgvector`). |
+| `POSTGRES_ENABLE_TIMESCALEDB` | When `true`, the init scripts enable TimescaleDB (requires the TimescaleDB image). |
+| `POSTGRES_SHARED_BUFFERS` | Value appended to `postgresql.conf` via init script to tune shared buffers. |
+| `TIMESCALEDB_MAX_MEMORY` | Optional TimescaleDB memory cap applied when the extension is enabled. |
 | `REDIS_URL` | Redis connection URL used by workers and background jobs. |
 | `QUEUE_POPULATION` / `QUEUE_CONTENT` / `QUEUE_SIMULATION` | Queue names consumed by the scheduler. |
 
@@ -273,6 +277,21 @@ mailboxes and syncing DNS—is documented in
    ./scripts/dev_up.sh
    ```
 
+   The default Postgres image is `ankane/pgvector:pg16`, which enables the
+   `vector` extension automatically. To opt into TimescaleDB set the
+   following overrides in `.env` and `infra/docker/.env` before running the
+   script:
+
+   ```env
+   POSTGRES_IMAGE=timescale/timescaledb-ha:pg16
+   POSTGRES_ENABLE_TIMESCALEDB=true
+   TIMESCALEDB_MAX_MEMORY=1GB
+   ```
+
+   You can also adjust `POSTGRES_SHARED_BUFFERS` (default `256MB`) to match
+   the memory available on your workstation. The values are appended to
+   `postgresql.conf` the first time the volume is created.
+
 ## ✉️ Mail infrastructure
 
 The project ships with a full automation layer for Mailcow (mail server) and
@@ -309,6 +328,15 @@ modules live under `azt3knet.services` and expose:
 
 The compose file mounts the repository into the container and runs
 Uvicorn in reload mode, so code changes are reflected immediately.
+
+## 🗒️ Migration note: Postgres 16 + pgvector
+
+- The base image moved from Postgres 15 to Postgres 16 with `pgvector`. Drop
+  the old volume with `docker compose down --volumes` (or perform a logical
+  backup/restore) before starting the new stack.
+- CI/CD pipelines or scripts that call `scripts/dev_up.sh` should pull the
+  new image (`docker compose pull postgres`) and recreate the database
+  service to pick up the extensions.
 
 ### Manual setup
 
