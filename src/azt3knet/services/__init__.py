@@ -2,6 +2,7 @@
 
 from .dns_manager import DeSECDNSManager, RRSet
 from .mailjet_provisioner import MailboxCredentials, MailjetProvisioner
+from .link_verifier import LinkCheckResult, LinkVerifier
 from .mail_service import AgentMailbox, MailService
 from .resilient_http_client import (
     CircuitBreaker,
@@ -17,6 +18,8 @@ __all__ = [
     "CircuitBreakerOpenError",
     "DeSECDNSManager",
     "ClientMetrics",
+    "LinkCheckResult",
+    "LinkVerifier",
     "MailboxCredentials",
     "MailService",
     "MailjetProvisioner",

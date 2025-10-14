@@ -10,7 +10,16 @@ from typing import Iterable
 from fastapi import APIRouter, HTTPException
 
 from azt3knet.core.mail_config import get_mailjet_settings
+from azt3knet.services.link_verifier import LinkVerifier
 from azt3knet.services.mail_service import AgentMailbox, MailService
+from azt3knet.storage.db import DatabaseConfigurationError, create_engine_from_url
+from azt3knet.storage.inbound_email import (
+    AttachmentMetadata,
+    InboundEmail,
+    InboundEmailPersistenceError,
+    InboundEmailRepository,
+    StoredInboundEmail,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +97,58 @@ def _extract_links(*parts: Iterable[str]) -> list[str]:
     return ordered_links
 
 
-def _attachment_count(message: EmailMessage) -> int:
-    """Return the number of attachments present in the message."""
+def _attachment_metadata(message: EmailMessage) -> list[AttachmentMetadata]:
+    """Collect metadata for each attachment in the email message."""
 
-    return sum(1 for _ in message.iter_attachments())
+    attachments: list[AttachmentMetadata] = []
+    for part in message.iter_attachments():
+        filename = part.get_filename()
+        content_type = part.get_content_type()
+        size: int | None = None
+        try:
+            payload = part.get_payload(decode=True)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Failed to decode attachment payload")
+            payload = None
+        if isinstance(payload, (bytes, bytearray)):
+            size = len(payload)
+        attachments.append(
+            AttachmentMetadata(
+                filename=filename or None,
+                content_type=content_type or None,
+                size=size,
+            )
+        )
+    return attachments
+
+
+def _sanitise_payload(value: object) -> object:
+    """Convert the webhook payload into JSON-serialisable primitives."""
+
+    if isinstance(value, dict):
+        return {str(key): _sanitise_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitise_payload(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _persist_inbound_email(email: InboundEmail) -> StoredInboundEmail | None:
+    """Persist the inbound email using the configured repository if available."""
+
+    try:
+        bundle = create_engine_from_url()
+    except DatabaseConfigurationError:
+        logger.debug("DATABASE_URL not configured; skipping inbound email persistence")
+        return None
+
+    repository = InboundEmailRepository.from_engine(bundle)
+    try:
+        return repository.persist_email(email)
+    except InboundEmailPersistenceError:
+        logger.exception("Failed to persist inbound email destined for %s", email.recipient)
+        return None
 
 
 @router.post("/webhooks/mailjet/inbound")
@@ -137,12 +194,30 @@ def mailjet_inbound_webhook(payload: dict[str, object]) -> dict[str, object]:
     email_message = mail_service.parse_inbound_event(payload)
     text_body, html_body = _body_content(email_message)
     links = _extract_links(text_body, html_body)
-    attachment_total = _attachment_count(email_message)
+    attachments = _attachment_metadata(email_message)
 
     subject = email_message.get("Subject", "") or payload.get("Subject") or ""
     sender = email_message.get("From", "") or payload.get("Sender") or ""
     recipient = email_message.get("To", "") or mailbox.address
     message_id = email_message.get("Message-ID", "") or payload.get("MessageID")
+
+    with LinkVerifier() as verifier:
+        link_checks = verifier.verify(links)
+
+    inbound_email = InboundEmail(
+        recipient=str(recipient) if recipient is not None else mailbox.address,
+        sender=str(sender) if sender is not None else "",
+        subject=str(subject) if subject is not None else "",
+        text_body=text_body,
+        html_body=html_body,
+        message_id=str(message_id) if message_id else None,
+        links=links,
+        link_checks=link_checks,
+        attachments=attachments,
+        raw_payload=_sanitise_payload(payload),
+    )
+
+    stored_email = _persist_inbound_email(inbound_email)
 
     response: dict[str, object] = {
         "status": "accepted",
@@ -152,11 +227,16 @@ def mailjet_inbound_webhook(payload: dict[str, object]) -> dict[str, object]:
         "text_body": text_body,
         "html_body": html_body,
         "links": links,
-        "attachment_count": attachment_total,
+        "attachment_count": len(attachments),
+        "attachments": [item.as_payload() for item in attachments],
+        "link_checks": [check.as_payload() for check in link_checks],
     }
 
     if message_id:
         response["message_id"] = str(message_id)
+
+    if stored_email is not None:
+        response["email_id"] = str(stored_email.id)
 
     return response
 
