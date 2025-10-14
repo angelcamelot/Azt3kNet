@@ -241,7 +241,8 @@ stack. The tables below document every variable that the application consumes.
 | `MAILCOW_RELAY_USER` / `MAILCOW_RELAY_PASS` | Credentials for the relay (**secret**, optional). |
 | `MAILCOW_VERIFY_TLS` | Enforce TLS certificate validation when connecting to Mailcow. |
 | `AZT3KNET_DOMAIN` | Base domain appended to generated agent mailboxes. |
-| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when constructing mailbox addresses. |
+| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when constructing mailbox addresses (legacy flows). |
+| `AZT3KNET_AGENT_MAIL_PASSWORD` | Password assigned to every auto-provisioned agent mailbox (**secret**). |
 | `AZT3KNET_MAIL_QUOTA_MB` | Mailbox quota (MiB) enforced during provisioning. |
 | `AZT3KNET_MAIL_TTL` | Default credential TTL when issuing temporary passwords. |
 | `AZT3KNET_MAIL_RATE_LIMIT` | Maximum outbound messages per agent mailbox. |

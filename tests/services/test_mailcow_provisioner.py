@@ -100,6 +100,38 @@ def test_create_agent_mailbox_preserves_falsy_values(
     assert credentials.password == ""
 
 
+def test_create_agent_mailbox_respects_shared_password_and_prefix(
+    mailcow_settings: MailcowSettings, provisioning_settings: MailProvisioningSettings
+) -> None:
+    provisioning_settings.agent_mail_password = "SharedSecret1"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        json_payload = json.loads(request.content.decode()) if request.content else {}
+        if request.url.path.endswith("/add/mailbox"):
+            assert json_payload["local_part"] == "jane.doe.123.20240101010101"
+            assert json_payload["password"] == "SharedSecret1"
+            assert json_payload["password2"] == "SharedSecret1"
+            return httpx.Response(200, json={"status": "success"})
+        if request.url.path.endswith("/add/app-passwd"):
+            return httpx.Response(200, json={"password": "app-secret"})
+        raise AssertionError(f"Unexpected request to {request.url}")
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        base_url=mailcow_settings.base_url,
+    )
+
+    provisioner = MailcowProvisioner(mailcow_settings, provisioning_settings, client=client)
+    credentials = provisioner.create_agent_mailbox(
+        "jane.doe.123.20240101010101",
+        display_name="Agent Jane",
+        apply_prefix=False,
+    )
+
+    assert credentials.address == "jane.doe.123.20240101010101@example.com"
+    assert credentials.password == "SharedSecret1"
+
+
 def test_get_dkim_key_handles_list_response(
     mailcow_settings: MailcowSettings, provisioning_settings: MailProvisioningSettings
 ) -> None:

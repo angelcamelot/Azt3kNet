@@ -7,11 +7,12 @@ import re
 import uuid
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Set
 
 from azt3knet.agent_factory.generator import generate_agents
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
-from azt3knet.compliance_guard import ComplianceViolation, ensure_guarded_llm
+from azt3knet.compliance_guard import ensure_guarded_llm
 from azt3knet.core.config import derive_seed_components, resolve_seed
 from azt3knet.core.mail_config import (
     MailcowSettings,
@@ -20,7 +21,7 @@ from azt3knet.core.mail_config import (
     get_mail_provisioning_settings,
 )
 from azt3knet.core.seeds import SeedSequence
-from azt3knet.llm.adapter import LLMAdapter, LLMRequest
+from azt3knet.llm.adapter import LLMAdapter
 from azt3knet.services.mailcow_provisioner import MailboxCredentials, MailcowProvisioner
 
 logger = logging.getLogger(__name__)
@@ -110,35 +111,43 @@ def _provisioner_from_settings(
     return MailcowProvisioner(mailcow_settings, provisioning_settings)
 
 
-_LEGACY_ALIAS_PATTERN = re.compile(r"^([a-z0-9]{1,28})\d{4}$")
+def _sanitize_name_component(value: str, fallback: str = "agent") -> str:
+    filtered = "".join(ch for ch in value.lower() if ch.isalnum())
+    if not filtered:
+        filtered = "".join(ch for ch in fallback.lower() if ch.isalnum())
+    return (filtered or fallback or "agent")[:16]
 
 
-def _encode_base36(value: int, *, length: int) -> str:
-    """Return a zero-padded base36 string using lowercase characters."""
-
-    alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
-    chars: list[str] = []
-    working = value
-    for _ in range(length):
-        working, remainder = divmod(working, 36)
-        chars.append(alphabet[remainder])
-    return "".join(reversed(chars))
+def _split_name_components(name: str) -> list[str]:
+    return [part for part in re.split(r"[^A-Za-z0-9]+", name) if part]
 
 
-def _mailbox_identifier(
-    agent: AgentProfile, alias_source: str, sequence: SeedSequence, index: int
+def _current_date_digits() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+
+def _mailbox_local_part_for_agent(
+    agent: AgentProfile,
+    sequence: SeedSequence,
+    index: int,
+    *,
+    attempt: int = 0,
+    timestamp_digits: str | None = None,
 ) -> str:
-    alias = _sanitize_local_part(alias_source, agent.username_hint)
-    # Preserve legacy identifiers (alias + four digits) to avoid re-provisioning
-    # existing mailboxes when rebuilding a population.
-    if _LEGACY_ALIAS_PATTERN.match(alias):
-        return alias
+    components = _split_name_components(agent.name)
+    if components:
+        first_component = components[0]
+        last_component = components[-1] if len(components) > 1 else components[0]
+    else:
+        first_component = agent.username_hint
+        last_component = agent.username_hint
 
-    high_bits = sequence.derive("mailbox", agent.seed, str(index), "hi")
-    low_bits = sequence.derive("mailbox", agent.seed, str(index), "lo")
-    combined = (high_bits << 32) | low_bits
-    suffix = _encode_base36(combined, length=13)
-    return f"{alias}{suffix}"
+    first = _sanitize_name_component(first_component, fallback="agent")
+    last = _sanitize_name_component(last_component, fallback=first)
+    digits_source = sequence.derive("mailbox", agent.seed, str(index), "digits", str(attempt))
+    random_digits = f"{digits_source % 1000:03d}"
+    suffix = timestamp_digits or _current_date_digits()
+    return f"{first}.{last}.{random_digits}.{suffix}"
 
 
 def build_population(
@@ -161,6 +170,8 @@ def build_population(
         agents = agents[: spec.preview]
 
     mailboxes: List[MailboxAssignment] = []
+    used_local_parts: Set[str] = set()
+    timestamp_digits = _current_date_digits()
     if create_mailboxes:
         with ExitStack() as stack:
             provisioner = mail_provisioner
@@ -168,30 +179,27 @@ def build_population(
                 provisioner = stack.enter_context(_provisioner_from_settings())
             provisioner.ensure_domain()
             for index, agent in enumerate(agents):
-                prompt = (
-                    f"Generate a lowercase alias (no spaces) for the mailbox of agent {agent.name} "
-                    f"located in {agent.country}."
-                )
-                try:
-                    alias_text = guarded_llm.generate_field(
-                        LLMRequest(
-                            prompt=prompt,
-                            seed=deterministic_seed + index,
-                            field_name="mailbox_alias",
-                        )
+                identifier: str | None = None
+                for attempt in range(1000):
+                    candidate = _mailbox_local_part_for_agent(
+                        agent,
+                        numeric_seed,
+                        index,
+                        attempt=attempt,
+                        timestamp_digits=timestamp_digits,
                     )
-                except ComplianceViolation as exc:
-                    logger.warning(
-                        "Compliance guard rejected mailbox alias for agent %s: %s. "
-                        "Falling back to deterministic alias.",
-                        agent.id,
-                        exc,
+                    if candidate not in used_local_parts:
+                        identifier = candidate
+                        used_local_parts.add(candidate)
+                        break
+                if identifier is None:
+                    raise RuntimeError(
+                        "Unable to generate a unique mailbox identifier after 1000 attempts"
                     )
-                    alias_text = agent.username_hint
-                identifier = _mailbox_identifier(agent, alias_text, numeric_seed, index)
                 credentials = provisioner.create_agent_mailbox(
                     identifier,
                     display_name=agent.name,
+                    apply_prefix=False,
                 )
                 logger.debug("Provisioned mailbox %s for agent %s", credentials.address, agent.id)
                 mailboxes.append(MailboxAssignment.from_credentials(agent.id, credentials))

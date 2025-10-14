@@ -38,6 +38,7 @@ values are:
 | `DESEC_TOKEN` | API token with RRset and DynDNS scopes |
 | `MAILCOW_API_KEY` | Mailcow API key for the provisioning account |
 | `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when generating agent mailboxes |
+| `AZT3KNET_AGENT_MAIL_PASSWORD` | Shared password applied to every mailbox provisioned for agents |
 
 ## Runtime components
 
@@ -55,17 +56,25 @@ wraps the REST API. It can:
 
 ### Mailbox naming strategy
 
-Mailbox identifiers are generated from a human-friendly alias suggested by the
-LLM or derived from the agent username hint. The alias is sanitized to contain
-only lowercase alphanumeric characters (maximum 32) and then suffixed with a
-deterministic 13-character base36 string derived from the population seed via
-`SeedSequence`. The suffix is composed from two independent derivations
-(`"hi"`/`"lo"`) mixed into a 64-bit value before encoding, yielding more than
-enough entropy to avoid collisions even when provisioning millions of agents.
+Every agent receives a Mailcow mailbox following the format:
 
-For compatibility with existing deployments, aliases that already match the
-legacy format (`<alias><four digits>`) are preserved as-is so that rebuilding a
-population does not attempt to rename existing mailboxes.
+```
+<first>.<last>.<random3digits>.<timestamp>@<domain>
+```
+
+`<first>` and `<last>` are derived from the agent's legal name (falling back to
+the username hint when either component is missing) and sanitized to contain
+only lowercase alphanumeric characters. Both segments are truncated to 16
+characters to stay within mailbox length limits. The three random digits are
+deterministically generated from the population seed to remain reproducible, and
+the timestamp corresponds to the current UTC time encoded as `YYYYMMDDHHMMSS`.
+This combination keeps addresses human friendly while ensuring uniqueness within
+each population build.
+
+If a collision is detected while provisioning a batch (for example, thousands of
+agents sharing the exact same name generated on the same second), the builder
+retries up to 1,000 distinct deterministic combinations before raising an
+exception.
 
 Minimal provisioning example:
 
@@ -81,11 +90,17 @@ with MailcowProvisioner(
     provisioning=get_mail_provisioning_settings(),
 ) as provisioner:
     creds = provisioner.create_agent_mailbox(
-        agent_id="123e4567-e89b-12d3-a456-426614174000",
+        agent_id="jane.doe.123.20241005123045",
         display_name="Agent 427",
+        apply_prefix=False,
     )
     print(creds.address, creds.app_password)
 ```
+
+Omitting the `password` parameter instructs the provisioner to use the shared
+value defined in `AZT3KNET_AGENT_MAIL_PASSWORD`. When set, that password becomes
+the IMAP/SMTP credential for every agent mailbox, simplifying downstream
+automation and credential rotation.
 
 ### DNS automation
 

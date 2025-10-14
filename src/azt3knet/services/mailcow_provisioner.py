@@ -129,12 +129,22 @@ class MailcowProvisioner:
         display_name: str | None = None,
         password: str | None = None,
         quota_mb: int | None = None,
+        apply_prefix: bool = True,
     ) -> MailboxCredentials:
         """Create a mailbox for an agent and return its credentials."""
 
-        local_part = self._mailbox_local_part(agent_id)
+        if "@" in agent_id:
+            raise ValueError("agent_id must be a local-part identifier without domain")
+
+        local_part = agent_id
+        if apply_prefix:
+            local_part = self._mailbox_local_part(agent_id)
         if password is None:
-            password = self.generate_password()
+            password = (
+                self._provisioning.agent_mail_password
+                if self._provisioning.agent_mail_password
+                else self.generate_password()
+            )
         if quota_mb is None:
             quota_mb = self._provisioning.mailbox_quota_mb
 

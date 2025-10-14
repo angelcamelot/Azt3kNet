@@ -5,12 +5,14 @@ from __future__ import annotations
 import uuid
 
 from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
-from azt3knet.compliance_guard import ComplianceViolation
-from azt3knet.core.config import resolve_seed
 from azt3knet.core.seeds import SeedSequence
 from azt3knet.llm.adapter import LLMAdapter, LLMRequest
 from azt3knet.population import builder as population_builder
-from azt3knet.population.builder import PopulationPreview, build_population
+from azt3knet.population.builder import (
+    PopulationPreview,
+    _mailbox_local_part_for_agent,
+    build_population,
+)
 from azt3knet.services.mailcow_provisioner import MailboxCredentials
 
 
@@ -25,7 +27,7 @@ class StubProvisioner:
     """In-memory Mailcow provisioner used to avoid network calls."""
 
     def __init__(self) -> None:
-        self.created: list[str] = []
+        self.created: list[dict[str, object]] = []
         self.closed = False
 
     def ensure_domain(self) -> None:
@@ -38,11 +40,17 @@ class StubProvisioner:
         display_name: str | None = None,
         password: str | None = None,
         quota_mb: int | None = None,
+        apply_prefix: bool = True,
     ) -> MailboxCredentials:
-        self.created.append(agent_id)
+        self.created.append({
+            "agent_id": agent_id,
+            "apply_prefix": apply_prefix,
+            "password": password,
+        })
         resolved_password = "example-password" if password is None else password
+        local_part = f"agent_{agent_id}" if apply_prefix else agent_id
         return MailboxCredentials(
-            address=f"agent_{agent_id}@example.org",
+            address=f"{local_part}@example.org",
             password=resolved_password,
             app_password="example-app-pass",
             smtp_host="smtp.example.org",
@@ -71,6 +79,7 @@ def test_build_population_with_mailboxes(monkeypatch) -> None:
 
     spec = PopulationSpec(count=2, country="US", seed="mail-seed")
     provisioner = StubProvisioner()
+    monkeypatch.setattr(population_builder, "_current_date_digits", lambda: "20241005123045")
     preview = build_population(
         spec,
         llm=StubLLM(),
@@ -82,25 +91,26 @@ def test_build_population_with_mailboxes(monkeypatch) -> None:
     assert len(preview.agents) == 2
     assert len(preview.mailboxes) == 2
     assert provisioner.created  # ensure the stub was used
+    assert all(
+        isinstance(entry.get("apply_prefix"), bool) and entry.get("apply_prefix") is False
+        for entry in provisioner.created
+    )
     assert all(assignment.address.endswith("@example.org") for assignment in preview.mailboxes)
+    for assignment in preview.mailboxes:
+        local_part = assignment.address.split("@", 1)[0]
+        assert local_part.count(".") == 3
+        _, _, digits, timestamp = local_part.split(".")
+        assert len(digits) == 3 and digits.isdigit()
+        assert timestamp == "20241005123045"
     assert not provisioner.closed
 
 
-class MailboxViolatingLLM(LLMAdapter):
-    """Stub LLM that raises a compliance violation when generating aliases."""
-
-    def generate_field(self, request: LLMRequest) -> str:
-        raise ComplianceViolation("mailbox alias rejected")
-
-
-def test_build_population_mailbox_alias_fallback(monkeypatch, caplog) -> None:
-    """Provisioning falls back to deterministic aliases when the guard rejects output."""
-
+def test_mailbox_local_part_handles_missing_last_name(monkeypatch) -> None:
     agent = AgentProfile(
         id=uuid.uuid4(),
         seed="seed:0",
-        name="Fallback Agent",
-        username_hint="Fallback_User_123",
+        name="Madonna",
+        username_hint="Performer42",
         country="US",
         city="",
         locale="en_US",
@@ -113,36 +123,16 @@ def test_build_population_mailbox_alias_fallback(monkeypatch, caplog) -> None:
         tone="informative",
         behavioral_biases=["early_adopter"],
     )
+    sequence = SeedSequence("mail-sequence")
+    monkeypatch.setattr(population_builder, "_current_date_digits", lambda: "20231201000000")
 
-    def fake_generate_agents(spec: PopulationSpec, llm: LLMAdapter):
-        return [agent]
+    local_part = _mailbox_local_part_for_agent(agent, sequence, 0)
 
-    monkeypatch.setattr(population_builder, "generate_agents", fake_generate_agents)
-
-    spec = PopulationSpec(count=1, country="US", seed="guarded-seed")
-    provisioner = StubProvisioner()
-    deterministic_seed = 2024
-
-    with caplog.at_level("WARNING"):
-        preview = build_population(
-            spec,
-            llm=MailboxViolatingLLM(),
-            deterministic_seed=deterministic_seed,
-            create_mailboxes=True,
-            mail_provisioner=provisioner,
-        )
-
-    assert len(preview.mailboxes) == 1
-    resolved_seed = resolve_seed(spec.seed)
-    numeric_seed = SeedSequence(f"{resolved_seed}:{deterministic_seed}")
-    expected_identifier = population_builder._mailbox_identifier(
-        agent,
-        agent.username_hint,
-        numeric_seed,
-        0,
-    )
-    assert provisioner.created == [expected_identifier]
-    assert "Compliance guard rejected mailbox alias" in caplog.text
+    first, last, digits, timestamp = local_part.split(".")
+    assert first == "madonna"
+    assert last == "madonna"
+    assert len(digits) == 3 and digits.isdigit()
+    assert timestamp == "20231201000000"
 
 
 def _make_agent(index: int) -> AgentProfile:
@@ -165,34 +155,12 @@ def _make_agent(index: int) -> AgentProfile:
     )
 
 
-def test_mailbox_identifier_generates_high_entropy_suffix() -> None:
-    agent = _make_agent(0)
+def test_mailbox_local_part_is_deterministic(monkeypatch) -> None:
+    agent = _make_agent(7)
     sequence = SeedSequence("batch-seed")
-    identifier = population_builder._mailbox_identifier(agent, "Alias Example", sequence, 0)
+    monkeypatch.setattr(population_builder, "_current_date_digits", lambda: "20240102030405")
 
-    prefix = "aliasexample"
-    assert identifier.startswith(prefix)
-    suffix = identifier[len(prefix) :]
-    assert len(suffix) == 13
-    assert suffix.isalnum()
-    assert suffix == suffix.lower()
+    first = _mailbox_local_part_for_agent(agent, sequence, 2)
+    second = _mailbox_local_part_for_agent(agent, sequence, 2)
 
-
-def test_mailbox_identifier_unique_for_large_batch() -> None:
-    sequence = SeedSequence("batch-seed")
-    identifiers = {
-        population_builder._mailbox_identifier(_make_agent(idx), "batch", sequence, idx)
-        for idx in range(5000)
-    }
-
-    assert len(identifiers) == 5000
-
-
-def test_mailbox_identifier_preserves_legacy_alias() -> None:
-    agent = _make_agent(42)
-    sequence = SeedSequence("legacy-seed")
-    legacy_alias = "legacyuser0042"
-
-    identifier = population_builder._mailbox_identifier(agent, legacy_alias, sequence, 0)
-
-    assert identifier == legacy_alias
+    assert first == second
