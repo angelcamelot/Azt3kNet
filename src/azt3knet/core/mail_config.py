@@ -8,9 +8,6 @@ from functools import lru_cache
 from typing import Callable
 
 
-_TRUE_VALUES = {"1", "true", "yes"}
-
-
 def _env_factory(name: str, default: str = "") -> Callable[[], str]:
     return lambda: os.getenv(name, default)
 
@@ -19,29 +16,55 @@ def _int_env_factory(name: str, default: str) -> Callable[[], int]:
     return lambda: int(os.getenv(name, default))
 
 
-def _bool_env_factory(name: str, default: str) -> Callable[[], bool]:
-    return lambda: os.getenv(name, default).lower() in _TRUE_VALUES
+def _tuple_env_factory(name: str, default: str) -> Callable[[], tuple[str, ...]]:
+    def factory() -> tuple[str, ...]:
+        raw = os.getenv(name, default)
+        if not raw:
+            return ()
+        return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+    return factory
 
 
 @dataclass
-class MailcowSettings:
-    """Configuration for interacting with the Mailcow API and services."""
+class MailjetSettings:
+    """Configuration for interacting with the Mailjet API and services."""
 
-    api_base: str = field(default_factory=_env_factory("MAILCOW_API", ""))
-    api_key: str = field(default_factory=_env_factory("MAILCOW_API_KEY", ""))
-    smtp_host: str = field(default_factory=_env_factory("MAILCOW_SMTP_HOST", ""))
-    smtp_port: int = field(default_factory=_int_env_factory("MAILCOW_SMTP_PORT", "587"))
-    imap_host: str = field(default_factory=_env_factory("MAILCOW_IMAP_HOST", ""))
-    imap_port: int = field(default_factory=_int_env_factory("MAILCOW_IMAP_PORT", "993"))
-    relay_host: str = field(default_factory=_env_factory("MAILCOW_RELAY_HOST", ""))
-    relay_port: int = field(default_factory=_int_env_factory("MAILCOW_RELAY_PORT", "587"))
-    relay_user: str = field(default_factory=_env_factory("MAILCOW_RELAY_USER", ""))
-    relay_password: str = field(default_factory=_env_factory("MAILCOW_RELAY_PASS", ""))
-    verify_tls: bool = field(default_factory=_bool_env_factory("MAILCOW_VERIFY_TLS", "true"))
+    api_base: str = field(default_factory=_env_factory("MAILJET_API", "https://api.mailjet.com"))
+    api_key: str = field(default_factory=_env_factory("MAILJET_API_KEY", ""))
+    api_secret: str = field(default_factory=_env_factory("MAILJET_API_SECRET", ""))
+    smtp_host: str = field(default_factory=_env_factory("MAILJET_SMTP_HOST", "in-v3.mailjet.com"))
+    smtp_port: int = field(default_factory=_int_env_factory("MAILJET_SMTP_PORT", "587"))
+    smtp_user: str = field(default_factory=_env_factory("MAILJET_SMTP_USER", ""))
+    smtp_pass: str = field(default_factory=_env_factory("MAILJET_SMTP_PASS", ""))
+    inbound_webhook_url: str = field(default_factory=_env_factory("MAILJET_INBOUND_URL", ""))
+    inbound_webhook_secret: str = field(default_factory=_env_factory("MAILJET_INBOUND_SECRET", ""))
+    mx_hosts: tuple[str, ...] = field(
+        default_factory=_tuple_env_factory("MAILJET_MX_HOSTS", "in.mailjet.com")
+    )
+    spf_include: str = field(
+        default_factory=_env_factory("MAILJET_SPF_INCLUDE", "include:spf.mailjet.com")
+    )
+
+    def __post_init__(self) -> None:
+        if not self.smtp_user:
+            object.__setattr__(self, "smtp_user", self.api_key)
+        if not self.smtp_pass:
+            object.__setattr__(self, "smtp_pass", self.api_secret)
+        if not self.mx_hosts:
+            object.__setattr__(self, "mx_hosts", ("in.mailjet.com",))
 
     @property
     def base_url(self) -> str:
         return self.api_base.rstrip("/")
+
+    @property
+    def smtp_username(self) -> str:
+        return self.smtp_user
+
+    @property
+    def smtp_password(self) -> str:
+        return self.smtp_pass
 
 
 @dataclass
@@ -50,12 +73,7 @@ class MailProvisioningSettings:
 
     domain: str = field(default_factory=_env_factory("AZT3KNET_DOMAIN", ""))
     agent_mail_prefix: str = field(default_factory=_env_factory("AZT3KNET_AGENT_MAIL_PREFIX", "agent_"))
-    agent_mail_password: str = field(
-        default_factory=_env_factory("AZT3KNET_AGENT_MAIL_PASSWORD", "")
-    )
-    mailbox_quota_mb: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_QUOTA_MB", "1024"))
     default_ttl: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_TTL", "300"))
-    rate_limit_per_hour: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_RATE_LIMIT", "100"))
 
 
 @dataclass
@@ -73,8 +91,8 @@ class DeSECSettings:
 
 
 @lru_cache(maxsize=1)
-def get_mailcow_settings() -> MailcowSettings:
-    return MailcowSettings()
+def get_mailjet_settings() -> MailjetSettings:
+    return MailjetSettings()
 
 
 @lru_cache(maxsize=1)

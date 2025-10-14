@@ -15,14 +15,14 @@ from azt3knet.agent_factory.models import AgentProfile, PopulationSpec
 from azt3knet.compliance_guard import ensure_guarded_llm
 from azt3knet.core.config import derive_seed_components, resolve_seed
 from azt3knet.core.mail_config import (
-    MailcowSettings,
     MailProvisioningSettings,
-    get_mailcow_settings,
+    MailjetSettings,
     get_mail_provisioning_settings,
+    get_mailjet_settings,
 )
 from azt3knet.core.seeds import SeedSequence
 from azt3knet.llm.adapter import LLMAdapter
-from azt3knet.services.mailcow_provisioner import MailboxCredentials, MailcowProvisioner
+from azt3knet.services.mailjet_provisioner import MailboxCredentials, MailjetProvisioner
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,12 @@ class MailboxAssignment:
 
     agent_id: uuid.UUID
     address: str
-    password: str
     smtp_host: str
     smtp_port: int
-    imap_host: str
-    imap_port: int
-    app_password: str | None = None
+    smtp_username: str
+    smtp_password: str
+    inbound_url: str | None = None
+    inbound_secret: str | None = None
 
     @classmethod
     def from_credentials(
@@ -47,12 +47,12 @@ class MailboxAssignment:
         return cls(
             agent_id=agent_id,
             address=credentials.address,
-            password=credentials.password,
             smtp_host=credentials.smtp_host,
             smtp_port=credentials.smtp_port,
-            imap_host=credentials.imap_host,
-            imap_port=credentials.imap_port,
-            app_password=credentials.app_password,
+            smtp_username=credentials.smtp_username,
+            smtp_password=credentials.smtp_password,
+            inbound_url=credentials.inbound_url,
+            inbound_secret=credentials.inbound_secret,
         )
 
     def as_public_dict(self) -> dict[str, object]:
@@ -61,12 +61,12 @@ class MailboxAssignment:
         return {
             "agent_id": str(self.agent_id),
             "address": self.address,
-            "password": self.password,
-            "app_password": self.app_password,
             "smtp_host": self.smtp_host,
             "smtp_port": self.smtp_port,
-            "imap_host": self.imap_host,
-            "imap_port": self.imap_port,
+            "smtp_username": self.smtp_username,
+            "smtp_password": self.smtp_password,
+            "inbound_url": self.inbound_url,
+            "inbound_secret": self.inbound_secret,
         }
 
 
@@ -97,18 +97,18 @@ def _sanitize_local_part(value: str, fallback: str, *, max_length: int = 32) -> 
 
 
 def _provisioner_from_settings(
-    *, mailcow: MailcowSettings | None = None,
+    *, mailjet: MailjetSettings | None = None,
     provisioning: MailProvisioningSettings | None = None,
-) -> MailcowProvisioner:
-    mailcow_settings = mailcow or get_mailcow_settings()
+) -> MailjetProvisioner:
+    mailjet_settings = mailjet or get_mailjet_settings()
     provisioning_settings = provisioning or get_mail_provisioning_settings()
-    if not mailcow_settings.api_base:
-        raise RuntimeError("MAILCOW_API is not configured; cannot provision mailboxes")
-    if not mailcow_settings.api_key:
-        raise RuntimeError("MAILCOW_API_KEY is not configured; cannot provision mailboxes")
+    if not mailjet_settings.api_key:
+        raise RuntimeError("MAILJET_API_KEY is not configured; cannot provision mailboxes")
+    if not mailjet_settings.api_secret:
+        raise RuntimeError("MAILJET_API_SECRET is not configured; cannot provision mailboxes")
     if not provisioning_settings.domain:
         raise RuntimeError("AZT3KNET_DOMAIN is not configured; cannot provision mailboxes")
-    return MailcowProvisioner(mailcow_settings, provisioning_settings)
+    return MailjetProvisioner(mailjet_settings, provisioning_settings)
 
 
 def _sanitize_name_component(value: str, fallback: str = "agent") -> str:
@@ -156,7 +156,7 @@ def build_population(
     llm: LLMAdapter,
     deterministic_seed: int,
     create_mailboxes: bool = False,
-    mail_provisioner: MailcowProvisioner | None = None,
+    mail_provisioner: MailjetProvisioner | None = None,
 ) -> PopulationPreview:
     """Generate a deterministic population and optionally create mailboxes."""
 
@@ -213,7 +213,7 @@ def generate_population_preview(
     namespace: str,
     llm: LLMAdapter,
     create_mailboxes: bool = False,
-    mail_provisioner: MailcowProvisioner | None = None,
+    mail_provisioner: MailjetProvisioner | None = None,
 ) -> PopulationGenerationResult:
     """Normalize seeds and build a population preview for a given namespace."""
 

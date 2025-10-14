@@ -1,67 +1,61 @@
-"""Bootstrap DNS records for Azt3kNet managed domains.
-
-The module orchestrates the initial synchronisation between Mailcow and deSEC.
-It is meant to be executed from within the ``azt3knet-dns-bootstrap`` container
-once the Mailcow stack is healthy.
-"""
+"""Bootstrap DNS records for Azt3kNet managed domains using Mailjet."""
 
 from __future__ import annotations
 
 import logging
 import os
-from typing import Callable
+from typing import Callable, Sequence
 
 import httpx
 
 from azt3knet.core.mail_config import (
     DeSECSettings,
     MailProvisioningSettings,
-    MailcowSettings,
+    MailjetSettings,
 )
-from azt3knet.services import DeSECDNSManager, MailcowProvisioner
+from azt3knet.services import DeSECDNSManager, MailjetProvisioner
 
 LOGGER = logging.getLogger(__name__)
 
 
 def bootstrap_dns(
     *,
-    mailcow_settings: MailcowSettings | None = None,
+    mailjet_settings: MailjetSettings | None = None,
     provisioning_settings: MailProvisioningSettings | None = None,
     desec_settings: DeSECSettings | None = None,
-    mail_provisioner_factory: Callable[[MailcowSettings, MailProvisioningSettings], MailcowProvisioner]
+    mail_provisioner_factory: Callable[[MailjetSettings, MailProvisioningSettings], MailjetProvisioner]
     | None = None,
     dns_manager_factory: Callable[[DeSECSettings], DeSECDNSManager] | None = None,
-    mail_host: str | None = None,
+    mx_records: Sequence[str] | None = None,
     public_ip: str | None = None,
 ) -> None:
-    """Synchronise Mailcow and deSEC state for the managed domain."""
+    """Synchronise Mailjet and deSEC state for the managed domain."""
 
-    mailcow_settings = mailcow_settings or MailcowSettings()
+    mailjet_settings = mailjet_settings or MailjetSettings()
     provisioning_settings = provisioning_settings or MailProvisioningSettings()
     desec_settings = desec_settings or DeSECSettings()
-    mail_provisioner_factory = mail_provisioner_factory or MailcowProvisioner
+    mail_provisioner_factory = mail_provisioner_factory or MailjetProvisioner
     dns_manager_factory = dns_manager_factory or DeSECDNSManager
 
-    computed_mail_host = (
-        mail_host
-        or mailcow_settings.smtp_host
-        or (f"mail.{desec_settings.domain}" if desec_settings.domain else "mail")
+    computed_mx_records: Sequence[str] = (
+        mx_records if mx_records else (mailjet_settings.mx_hosts or ("in.mailjet.com",))
     )
 
     LOGGER.info("Bootstrapping DNS records for domain %s", desec_settings.domain)
 
-    with mail_provisioner_factory(mailcow_settings, provisioning_settings) as mailcow:
-        mailcow.ensure_domain()
-        mailcow.configure_relay()
-        dkim_key = mailcow.get_dkim_key()
+    with mail_provisioner_factory(mailjet_settings, provisioning_settings) as mailjet:
+        mailjet.ensure_domain()
+        dkim_key = mailjet.get_dkim_key()
 
     with dns_manager_factory(desec_settings) as dns_manager:
         resolved_ip = public_ip or dns_manager.lookup_public_ip()
         dns_manager.bootstrap_mail_records(
-            mail_host=computed_mail_host,
-            public_ip=resolved_ip,
+            mx_records=computed_mx_records,
             dkim_key=dkim_key,
             ttl=provisioning_settings.default_ttl,
+            spf_policy=f"v=spf1 {mailjet_settings.spf_include} -all",
+            a_record_host="mail" if resolved_ip else None,
+            a_record_ip=resolved_ip if resolved_ip else None,
         )
         dns_manager.update_dyndns(hostname=desec_settings.domain, ip_address=resolved_ip)
 

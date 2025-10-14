@@ -1,7 +1,7 @@
 """Service layer integrations for external infrastructure."""
 
 from .dns_manager import DeSECDNSManager, RRSet
-from .mailcow_provisioner import MailcowProvisioner, MailboxCredentials
+from .mailjet_provisioner import MailboxCredentials, MailjetProvisioner
 from .mail_service import AgentMailbox, MailService
 from .resilient_http_client import (
     CircuitBreaker,
@@ -19,7 +19,7 @@ __all__ = [
     "ClientMetrics",
     "MailboxCredentials",
     "MailService",
-    "MailcowProvisioner",
+    "MailjetProvisioner",
     "ResilientHTTPClient",
     "RRSet",
     "RetryConfiguration",

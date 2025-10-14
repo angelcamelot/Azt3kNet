@@ -1,9 +1,10 @@
-# Azt3kNet + deSEC + Mailcow Integration Plan
+# Azt3kNet + deSEC + Mailjet Integration Plan
 
 ## Overview
 
 Deliver a deterministic pipeline that generates synthetic populations with full
-digital identities, provisions Mailcow mailboxes, and manages DNS via deSEC.
+digital identities, provisions Mailjet-backed mailboxes, and manages DNS via
+deSEC. Both the CLI and API should expose the flow end-to-end.
 Both the CLI and API should expose the flow end-to-end.
 
 ## Commit strategy
@@ -15,8 +16,8 @@ Both the CLI and API should expose the flow end-to-end.
      README.
    - Create the initial structure under `src/azt3knet/` for `cli/`, `api/`,
      `services/`, and `adapters/`.
-   - Add `docker-compose.mail.yml` with Mailcow and the `azt3knet-dns-bootstrap`
-     container plus startup scripts.
+   - Wire the DNS bootstrap service into the Docker stack so Mailjet DNS records
+     stay synchronized.
 
 2. **DNS bootstrap and dynamic updates**
    - Implement `infra/dns_bootstrap.py` and `infra/dyn_updater.py` using the
@@ -39,14 +40,15 @@ Both the CLI and API should expose the flow end-to-end.
    - Document the flow in `docs/cli.md` with practical examples.
 
 5. **Mailbox provisioning and persistence**
-   - Implement `src/azt3knet/services/mailcow_provisioner.py` using the Mailcow
-     API (`/api/v1/add/mailbox`) with retries/backoff and conflict handling.
+   - Implement `src/azt3knet/services/mailjet_provisioner.py` using the Mailjet
+     API (`/v3/REST/domain`, `/v3/REST/inbound`) with retries/backoff and
+     conflict handling.
    - Integrate password encryption with `SECRET_KEY_FOR_KV_ENC`
      (libsodium/fernet).
    - Add a database repository (`sqlalchemy`/`asyncpg` or the chosen stack) with
      tables `agent_mailbox`, `audit_log`, etc.
    - Extend the CLI/API with `--create-mailboxes` / `create_mailboxes`.
-   - Write tests that mock the LLM + Mailcow + DB (including rollbacks).
+   - Write tests that mock the LLM + Mailjet + DB (including rollbacks).
 
 6. **REST API and recreation script**
    - Add the `POST /api/populate` endpoint with FastAPI (or the current
@@ -69,7 +71,7 @@ Both the CLI and API should expose the flow end-to-end.
 - `src/azt3knet/dns/dns_manager.py` (placeholder class/interfaces).
 - `src/azt3knet/llm/adapter.py` (stub for `generate_field`).
 - `src/azt3knet/agent_factory/models.py` (shared dataclasses for agents).
-- `src/azt3knet/services/mailcow_provisioner.py` (interface + TODOs).
+- `src/azt3knet/services/mailjet_provisioner.py` (interface + TODOs).
 - `src/azt3knet/population/builder.py` (stub for `build_population`).
 - `src/azt3knet/cli/populate.py` (Typer CLI stub).
 - `src/azt3knet/api/routes/populate.py` (FastAPI router stub).

@@ -114,25 +114,35 @@ class DeSECDNSManager:
     def bootstrap_mail_records(
         self,
         *,
-        mail_host: str,
-        public_ip: str,
+        mx_records: Sequence[str],
         dkim_key: str,
         ttl: int | None = None,
         spf_policy: str | None = None,
         dmarc_policy: str | None = None,
+        a_record_host: str | None = None,
+        a_record_ip: str | None = None,
     ) -> None:
-        """Ensure that all DNS records required for the mail stack exist."""
+        """Ensure that all DNS records required for the Mailjet stack exist."""
+
+        if not mx_records:
+            raise ValueError("mx_records must contain at least one host")
 
         ttl = ttl or self._settings.default_ttl
         spf_policy = spf_policy or "v=spf1 mx -all"
         dmarc_policy = dmarc_policy or (
             f"v=DMARC1; p=none; rua=mailto:postmaster@{self._settings.domain}"
         )
-        mail_host_fqdn = mail_host.rstrip(".") + "."
 
         rrsets: List[RRSet] = [
-            RRSet(subname="@", type="MX", records=[f"10 {mail_host_fqdn}"], ttl=ttl),
-            RRSet(subname="mail", type="A", records=[public_ip], ttl=ttl),
+            RRSet(
+                subname="@",
+                type="MX",
+                records=[
+                    f"{priority * 10} {host.rstrip('.')}."
+                    for priority, host in enumerate(mx_records, start=1)
+                ],
+                ttl=ttl,
+            ),
             RRSet(subname="@", type="TXT", records=[f'"{spf_policy}"'], ttl=ttl),
             RRSet(subname="_dmarc", type="TXT", records=[f'"{dmarc_policy}"'], ttl=ttl),
             RRSet(
@@ -142,11 +152,20 @@ class DeSECDNSManager:
                 ttl=ttl,
             ),
         ]
+        if a_record_host and a_record_ip:
+            rrsets.append(
+                RRSet(
+                    subname=a_record_host,
+                    type="A",
+                    records=[a_record_ip],
+                    ttl=ttl,
+                )
+            )
         logger.info("Bootstrapping %d mail-related DNS RRsets", len(rrsets))
         self.bulk_upsert(rrsets)
 
     def sync_dkim_record(self, dkim_key: str, *, ttl: int | None = None) -> None:
-        """Update the DKIM TXT record with the latest key from Mailcow."""
+        """Update the DKIM TXT record with the latest key from Mailjet."""
 
         ttl = ttl or self._settings.default_ttl
         record = dkim_key if dkim_key.startswith('"') else f'"{dkim_key}"'
