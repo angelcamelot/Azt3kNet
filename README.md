@@ -396,6 +396,8 @@ Uvicorn in reload mode, so code changes are reflected immediately.
    ```
 
 3. Set up the Python environment (e.g., `poetry install`).
+   The lockfile is generated with Poetry 2.2, so ensure your local installation
+   is at least 2.2.x (`pipx install "poetry==2.2.*"` or `pipx upgrade poetry`).
 4. Start auxiliary services (Redis/Postgres/Ollama) with `./scripts/dev_up.sh postgres redis ollama`.
 5. Run migrations (`azt3knet db upgrade`).
 6. Launch the API (`poetry run uvicorn azt3knet.api.main:app --reload`) and worker (`poetry run azt3knet worker`).
