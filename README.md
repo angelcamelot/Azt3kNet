@@ -19,7 +19,7 @@ Azt3kNet is a research-oriented Python system that models networks of digital ag
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md         # Deep dive into the proposed architecture
-│   ├── mail-architecture.md    # Mailjet + deSEC automation plan
+│   ├── mail-architecture.md    # Mailjet + Cloudflare automation plan
 │   ├── ADRs/                   # Architecture decision records
 │   └── diagrams/               # Component/flow diagrams
 ├── infra/
@@ -254,15 +254,14 @@ stack. The tables below document every variable that the application consumes.
 | `OLLAMA_MODEL` | Default Ollama model tag used for generations. |
 | `OLLAMA_TIMEOUT` | Request timeout (seconds) for Ollama calls. |
 
-### Mail automation (Mailjet + deSEC)
+### Mail automation (Mailjet + Cloudflare)
 
 | Variable | Description |
 | --- | --- |
-| `DESEC_API` | Base URL for the deSEC REST API. |
-| `DESEC_DOMAIN` | `dedyn.io` hostname managed through deSEC. |
-| `DESEC_TOKEN` | API token with RRset and DynDNS scopes (**secret**). |
-| `DESEC_DYNDNS_UPDATE_URL` | Endpoint used for periodic DynDNS refreshes. |
-| `DESEC_UPDATE_INTERVAL_HOURS` | Interval between DynDNS updates. |
+| `CLOUDFLARE_API` | Base URL for the Cloudflare REST API. |
+| `CLOUDFLARE_API_TOKEN` | Scoped API token with DNS edit permissions (**secret**). |
+| `CLOUDFLARE_ZONE_ID` | Identifier of the Cloudflare zone managing the domain. |
+| `CLOUDFLARE_ZONE_NAME` | Canonical domain name delegated to Cloudflare. |
 | `MAILJET_API` | Base URL for the Mailjet API. |
 | `MAILJET_API_KEY` / `MAILJET_API_SECRET` | API credentials for SMTP/API access (**secret**). |
 | `MAILJET_SMTP_HOST` / `MAILJET_SMTP_PORT` | SMTP endpoint exposed by Mailjet. |
@@ -319,15 +318,15 @@ mailboxes and syncing DNS—is documented in
 ## ✉️ Mail infrastructure
 
 Azt3kNet integrates Mailjet (SMTP/API delivery and inbound webhooks) with
-deSEC (DNSSEC-enabled dynamic DNS). Review
+Cloudflare (authoritative DNS + tunnel). Review
 [`docs/mail-architecture.md`](docs/mail-architecture.md) for the detailed
 blueprint, environment variables and bootstrap scripts. Core modules live under
 `azt3knet.services` and expose:
 
 * `MailjetProvisioner` – REST client that registers sender domains, provisions
   logical agent mailboxes, and configures inbound routes.
-* `DeSECDNSManager` – ensures MX/SPF/DKIM/DMARC records exist and keeps DynDNS
-  assignments fresh.
+* `CloudflareDNSManager` – ensures MX/SPF/DKIM/DMARC records exist and aligns
+  Cloudflare DNS with Mailjet state.
 * `MailService` – SMTP convenience wrapper to send emails plus helpers to
   validate and parse Mailjet inbound webhook payloads.
 
@@ -418,7 +417,7 @@ poetry install
 poetry run pytest
 ```
 
-## 🌐 Publish the API on a deSEC hostname
+## 🌐 Publish the API through Cloudflare
 
 Use the optional Cloudflare Tunnel profile to expose the FastAPI service without
 opening inbound ports. Configure the environment variables documented in

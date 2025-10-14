@@ -77,17 +77,20 @@ class MailProvisioningSettings:
 
 
 @dataclass
-class DeSECSettings:
-    """Configuration for deSEC dynamic DNS management."""
+class CloudflareDNSSettings:
+    """Configuration required to manage DNS records via Cloudflare."""
 
-    api_base: str = field(default_factory=_env_factory("DESEC_API", "https://desec.io/api/v1"))
-    domain: str = field(default_factory=_env_factory("DESEC_DOMAIN", ""))
-    token: str = field(default_factory=_env_factory("DESEC_TOKEN", ""))
-    dyndns_update_url: str = field(
-        default_factory=_env_factory("DESEC_DYNDNS_UPDATE_URL", "https://update.dedyn.io")
-    )
-    update_interval_hours: int = field(default_factory=_int_env_factory("DESEC_UPDATE_INTERVAL_HOURS", "24"))
+    api_base: str = field(default_factory=_env_factory("CLOUDFLARE_API", "https://api.cloudflare.com/client/v4"))
+    api_token: str = field(default_factory=_env_factory("CLOUDFLARE_API_TOKEN", ""))
+    zone_id: str = field(default_factory=_env_factory("CLOUDFLARE_ZONE_ID", ""))
+    zone_name: str = field(default_factory=_env_factory("CLOUDFLARE_ZONE_NAME", ""))
     default_ttl: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_TTL", "300"))
+
+    def __post_init__(self) -> None:
+        if not self.zone_name:
+            fallback = os.getenv("AZT3KNET_DOMAIN", "")
+            if fallback:
+                object.__setattr__(self, "zone_name", fallback)
 
 
 @dataclass
@@ -121,8 +124,8 @@ def get_mail_provisioning_settings() -> MailProvisioningSettings:
 
 
 @lru_cache(maxsize=1)
-def get_desec_settings() -> DeSECSettings:
-    return DeSECSettings()
+def get_cloudflare_dns_settings() -> CloudflareDNSSettings:
+    return CloudflareDNSSettings()
 
 
 @lru_cache(maxsize=1)

@@ -1,6 +1,6 @@
 """Service layer integrations for external infrastructure."""
 
-from .dns_manager import DeSECDNSManager, RRSet
+from .dns_manager import CloudflareDNSManager, DNSRecord, CloudflareAPIError
 from .mailjet_provisioner import MailboxCredentials, MailjetProvisioner
 from .link_verifier import LinkCheckResult, LinkVerifier
 from .mail_service import AgentMailbox, MailService
@@ -16,7 +16,9 @@ __all__ = [
     "AgentMailbox",
     "CircuitBreaker",
     "CircuitBreakerOpenError",
-    "DeSECDNSManager",
+    "CloudflareAPIError",
+    "CloudflareDNSManager",
+    "DNSRecord",
     "ClientMetrics",
     "LinkCheckResult",
     "LinkVerifier",

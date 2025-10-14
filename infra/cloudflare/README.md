@@ -1,9 +1,9 @@
 # Cloudflare Tunnel integration
 
 The optional `cloudflared` service exposes the local FastAPI instance through a
-Cloudflare Tunnel while keeping DNS for the apex domain on deSEC. This lets you
-serve the API via a `*.dedyn.io` hostname without opening inbound ports on the
-host machine.
+Cloudflare Tunnel while DNS for the apex domain is also managed in Cloudflare.
+This lets you serve the API via your production hostname without opening
+inbound ports on the host machine.
 
 ## Prerequisites
 
@@ -13,9 +13,9 @@ host machine.
 3. Add a **Public hostname** for the tunnel and point it to `http://api:8000`
    (or the service URL you prefer). Cloudflare will issue a unique
    `*.cfargotunnel.com` target for the tunnel.
-4. In deSEC add a CNAME (for example `api`) that points to the
+4. In Cloudflare publish a CNAME (for example `api`) that points to the
    `*.cfargotunnel.com` host provided by Cloudflare. The DNS bootstrap script in
-   this repository automates the RRset creation when the relevant environment
+   this repository automates the record creation when the relevant environment
    variables are defined.
 
 ## Environment variables
@@ -24,7 +24,7 @@ Populate the following variables in `.env`:
 
 ```env
 CLOUDFLARE_TUNNEL_TOKEN=<token exported from the Cloudflare dashboard>
-CLOUDFLARE_TUNNEL_HOSTNAME=api.azt3knet.dedyn.io
+CLOUDFLARE_TUNNEL_HOSTNAME=api.azt3knet.example
 CLOUDFLARE_TUNNEL_SERVICE=http://api:8000
 CLOUDFLARE_TUNNEL_CNAME=<uuid>.cfargotunnel.com
 CLOUDFLARE_TUNNEL_SUBDOMAIN=api

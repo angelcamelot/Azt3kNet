@@ -2,16 +2,16 @@
 
 This document describes how Azt3kNet provisions real mailboxes for every agent by
 combining **Mailjet** (cloud SMTP/API platform with inbound webhooks) with
-**deSEC** (DNSSEC-enabled DynDNS provider).
+**Cloudflare** (authoritative DNS and tunnel provider).
 
 ## Overview
 
 ```
-+-----------------+          +----------------------+          +------------------+
-| Azt3kNet Core   |  HTTPS   | Mailjet API          |  HTTPS   | deSEC API        |
-|  - agent model  +--------->+  /v3/REST/domain     +--------->+  /domains/...    |
-|  - orchestrator |          |  /v3/REST/inbound    |          |  DynDNS          |
-+-----------------+          +----------------------+          +------------------+
++-----------------+          +----------------------+          +----------------------+
+| Azt3kNet Core   |  HTTPS   | Mailjet API          |  HTTPS   | Cloudflare DNS API   |
+|  - agent model  +--------->+  /v3/REST/domain     +--------->+  /zones/:id/records  |
+|  - orchestrator |          |  /v3/REST/inbound    |          |                      |
++-----------------+          +----------------------+          +----------------------+
          |                            |                                  |
          | SMTP (API key)             | publishes DKIM/SPF               |
          v                            v                                  v
@@ -24,8 +24,9 @@ combining **Mailjet** (cloud SMTP/API platform with inbound webhooks) with
 
 * Mailjet delivers outbound mail via authenticated SMTP/API calls and forwards
   inbound messages to webhooks.
-* deSEC hosts the public DNS zone and offers a DynDNS endpoint to keep the
-  `dedyn.io` hostname pointing to the current public IP address.
+* Cloudflare hosts the public DNS zone and exposes a programmable REST API for
+  record management. Optional Cloudflare Tunnel endpoints remove the need for a
+  public IP address.
 * Azt3kNet modules orchestrate both systems to provide a first-class
   `bot123@domain` identity per agent/bot.
 
@@ -37,14 +38,15 @@ values are:
 
 | Variable | Purpose |
 | --- | --- |
-| `DESEC_DOMAIN` | Base dedyn.io domain managed in deSEC |
-| `DESEC_TOKEN` | API token with RRset and DynDNS scopes |
-| `MAILJET_API_KEY` / `MAILJET_API_SECRET` | Mailjet API credentials used for SMTP/API authentication |
-| `MAILJET_MX_HOSTS` | Comma separated MX targets delegated to Mailjet (`in.mailjet.com`, `in-v3.mailjet.com`, ...)|
-| `MAILJET_SPF_INCLUDE` | SPF include directive published in DNS (`include:spf.mailjet.com` by default) |
-| `MAILJET_INBOUND_URL` | HTTPS endpoint that receives Mailjet inbound events |
-| `MAILJET_INBOUND_SECRET` | Optional shared secret validated on inbound webhook calls |
-| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when generating agent addresses |
+| `CLOUDFLARE_API_TOKEN` | Scoped API token with DNS edit permissions. |
+| `CLOUDFLARE_ZONE_ID` | Identifier of the Cloudflare zone that hosts the domain. |
+| `CLOUDFLARE_ZONE_NAME` | Canonical domain managed in Cloudflare (for example `agents.example`). |
+| `MAILJET_API_KEY` / `MAILJET_API_SECRET` | Mailjet API credentials used for SMTP/API authentication. |
+| `MAILJET_MX_HOSTS` | Comma separated MX targets delegated to Mailjet (`in.mailjet.com`, `in-v3.mailjet.com`, …). |
+| `MAILJET_SPF_INCLUDE` | SPF include directive published in DNS (`include:spf.mailjet.com` by default). |
+| `MAILJET_INBOUND_URL` | HTTPS endpoint that receives Mailjet inbound events. |
+| `MAILJET_INBOUND_SECRET` | Optional shared secret validated on inbound webhook calls. |
+| `AZT3KNET_AGENT_MAIL_PREFIX` | Prefix used when generating agent addresses. |
 
 ## Runtime components
 
@@ -101,19 +103,17 @@ with MailjetProvisioner(
 
 ### DNS automation
 
-`DeSECDNSManager` automates RRset management and DynDNS updates via the deSEC
+`CloudflareDNSManager` automates DNS record management via the Cloudflare REST
 API. It exposes helpers to:
 
-* bulk upsert MX, SPF, DKIM and DMARC records using Mailjet-generated keys,
-* optionally maintain a `mail.<domain>` A record that points to the current
-  public IP (used by legacy tooling),
-* call `https://update.dedyn.io` with token authentication to refresh the
-  dynamic DNS assignment every 24 hours (configurable).
+* publish MX, SPF, DKIM and DMARC records using Mailjet-generated keys,
+* replace outdated records safely while preserving unrelated TXT entries,
+* upsert Cloudflare Tunnel CNAMEs so the API remains reachable without a public
+  IP address.
 
 The script `scripts/dns_bootstrap.py` ties both services together: it fetches the
-latest DKIM key from Mailjet, discovers the public IP, updates DNS RRsets and
-triggers a DynDNS refresh. This script is designed to run at container startup
-(via Docker entrypoint or cron).
+latest DKIM key from Mailjet and updates Cloudflare DNS records accordingly. The
+script is designed to run at container startup (via Docker entrypoint or cron).
 
 ### Mail access helper
 
@@ -126,7 +126,7 @@ payloads into structured `EmailMessage` objects for downstream processing.
 
 ### Prerequisites
 
-- A public domain delegated to deSEC (for example `your-prefix.dedyn.io`).
+- A public domain delegated to Cloudflare (for example `agents.example`).
 - A Mailjet account with access to the Transactional Email and Inbound routes.
 - HTTPS hosting for the inbound webhook endpoint (publicly reachable).
 - Python 3.11+ available locally to execute the helper scripts.
@@ -134,8 +134,8 @@ payloads into structured `EmailMessage` objects for downstream processing.
 ### Configure Mailjet
 
 1. Add your domain under **Account > Senders & Domains** in the Mailjet console
-   and follow the verification steps. You can skip MX/DKIM setup until the deSEC
-   integration below is complete.
+   and follow the verification steps. You can skip MX/DKIM setup until the
+   Cloudflare integration below is complete.
 2. Generate an API key pair (one key/secret per environment) and store it in
    `.env` as `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
 3. Determine the MX hosts assigned to your account. The defaults are
@@ -145,18 +145,19 @@ payloads into structured `EmailMessage` objects for downstream processing.
    expose it publicly. Set `MAILJET_INBOUND_URL` to that URL and optionally set a
    shared secret (`MAILJET_INBOUND_SECRET`).
 
-### Configure deSEC DynDNS
+### Configure Cloudflare DNS
 
-1. Create an account at [https://desec.io](https://desec.io) and add your
-   hostname (for example `your-prefix.dedyn.io`). Enable DynDNS for the domain.
-2. Generate an API token with RRset read/write permissions and DynDNS access.
-   Store it in `.env` as `DESEC_TOKEN`.
-3. Set `DESEC_DOMAIN` to the managed hostname (for example `your-prefix.dedyn.io`).
-   Optionally override `DESEC_DYNDNS_UPDATE_URL` if you use a custom endpoint.
+1. Log into the [Cloudflare dashboard](https://dash.cloudflare.com/) and locate
+   the zone that hosts your domain.
+2. Create an API token under **My Profile → API Tokens** with the
+   **Zone.DNS → Edit** permission scoped to the zone above. Store it in `.env` as
+   `CLOUDFLARE_API_TOKEN`.
+3. Copy the zone identifier from the dashboard and set `CLOUDFLARE_ZONE_ID` in
+   `.env`. Ensure `CLOUDFLARE_ZONE_NAME` matches the canonical domain name.
 
 ### Bootstrap DNS records
 
-1. Ensure `.env` contains the Mailjet and deSEC values described above.
+1. Ensure `.env` contains the Mailjet and Cloudflare values described above.
 2. Run the bootstrap script locally or inside the Docker stack:
 
    ```bash
@@ -166,24 +167,25 @@ payloads into structured `EmailMessage` objects for downstream processing.
    The command will:
 
    - query Mailjet for the DKIM key associated with the domain,
-   - publish MX/SPF/DKIM/DMARC records via the deSEC API,
-   - update the dynamic DNS entry with the current public IP.
+   - publish MX/SPF/DKIM/DMARC records via the Cloudflare API,
+   - optionally upsert a Cloudflare Tunnel CNAME when the relevant environment
+     variables are set.
 
 3. After DNS changes propagate, finalize the domain verification in the Mailjet
    console. Mailjet should report successful DKIM/SPF checks.
 
-### Cloudflare Tunnel + deSEC
+### Cloudflare Tunnel (optional)
 
-Expose the FastAPI surface through Cloudflare while keeping DNS delegated to
-deSEC:
+Expose the FastAPI surface through Cloudflare while keeping the host machine
+fully private:
 
 1. Create a tunnel in the Cloudflare Zero Trust dashboard and add a public
    hostname pointing to `http://api:8000` (or the service URL you prefer).
-2. Copy the tunnel token and fill the Cloudflare variables in `.env`:
+2. Copy the tunnel token and fill the Cloudflare tunnel variables in `.env`:
 
    ```env
    CLOUDFLARE_TUNNEL_TOKEN=<token>
-   CLOUDFLARE_TUNNEL_HOSTNAME=api.azt3knet.dedyn.io
+   CLOUDFLARE_TUNNEL_HOSTNAME=api.agents.example
    CLOUDFLARE_TUNNEL_SERVICE=http://api:8000
    CLOUDFLARE_TUNNEL_CNAME=<uuid>.cfargotunnel.com
    ```
@@ -193,18 +195,12 @@ deSEC:
 4. Run `scripts/dns_bootstrap.py` to publish the CNAME pointing at the
    Cloudflare tunnel (`api IN CNAME <uuid>.cfargotunnel.com`).
 
-Requests for `https://api.azt3knet.dedyn.io` now reach Cloudflare, which
-terminates TLS and forwards traffic to the Docker network through the tunnel.
+Requests for `https://api.agents.example` now reach Cloudflare, which terminates
+TLS and forwards traffic to the Docker network through the tunnel.
 
 ### Provision agent identities
 
-Invoke the CLI with the `--create-mailboxes` flag to provision Mailjet identities
-alongside the population preview:
-
-```bash
-poetry run azt3knet populate --count 5 --country ES --create-mailboxes
-```
-
-The command prints both the generated agents and their corresponding SMTP
-credentials. Inbound routes are automatically created for each new address and
-point to the webhook configured via `MAILJET_INBOUND_URL`.
+Once DNS and Mailjet are configured, call the provisioning APIs (or CLI
+commands) to generate mailboxes for every agent. Each agent receives unique
+credentials tied to the Mailjet domain and can immediately send/receive email
+through the infrastructure described above.
