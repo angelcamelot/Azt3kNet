@@ -9,7 +9,11 @@ services:
       AZT3KNET_ENVIRONMENT: ${AZT3KNET_ENVIRONMENT:-development}
       AZT3KNET_LOG_LEVEL: ${AZT3KNET_LOG_LEVEL:-INFO}
       AZT3KNET_COMPLIANCE_ENABLED: ${AZT3KNET_COMPLIANCE_ENABLED:-true}
-      API_HOST: 0.0.0.0
+      ENABLE_METRICS: ${ENABLE_METRICS:-true}
+      ENABLE_TRACING: ${ENABLE_TRACING:-true}
+      API_APP_MODULE: ${API_APP_MODULE:-azt3knet.api.main:app}
+      API_RELOAD_FLAG: ${API_RELOAD_FLAG:---reload}
+      API_HOST: ${API_HOST:-0.0.0.0}
       API_PORT: ${API_PORT:-8000}
       DATABASE_BACKEND: ${DATABASE_BACKEND:-postgres}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://azt3knet:azt3knet@postgres:5432/azt3knet}
@@ -32,15 +36,14 @@ services:
       AZT3KNET_AUTO_BOOTSTRAP_MAILCOW: ${AZT3KNET_AUTO_BOOTSTRAP_MAILCOW:-1}
     volumes:
       - ./:/app
-    command: [
-      "uvicorn",
-      "azt3knet.api.main:app",
-      "--host",
-      "0.0.0.0",
-      "--port",
-      "8000",
-      "--reload"
-    ]
+    command:
+      - sh
+      - -c
+      - >-
+        uvicorn ${API_APP_MODULE:-azt3knet.api.main:app}
+        --host ${API_HOST:-0.0.0.0}
+        --port ${API_PORT:-8000}
+        ${API_RELOAD_FLAG:---reload}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -54,7 +57,7 @@ services:
         condition: service_healthy
 
   cloudflared:
-    image: cloudflare/cloudflared:2024.8.1
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:2024.8.1}
     restart: unless-stopped
     command:
       - tunnel
@@ -94,7 +97,7 @@ services:
       start_period: 5s
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
@@ -107,7 +110,7 @@ services:
       start_period: 5s
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     restart: unless-stopped
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
@@ -121,12 +124,12 @@ services:
       start_period: 10s
 
   minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:-minio/minio:latest}
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-azt3knet}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-azt3knet123}
-    command: ["server", "/data", "--console-address", ":9001"]
+    command: ["server", "/data", "--console-address", ":${MINIO_CONSOLE_PORT:-9001}"]
     ports:
       - "${MINIO_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -140,7 +143,7 @@ services:
       start_period: 15s
 
   prometheus:
-    image: prom/prometheus:v2.53.1
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v2.53.1}
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -153,7 +156,7 @@ services:
         condition: service_started
 
   grafana:
-    image: grafana/grafana:10.4.3
+    image: ${GRAFANA_IMAGE:-grafana/grafana:10.4.3}
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
