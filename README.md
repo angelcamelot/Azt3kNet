@@ -157,6 +157,18 @@ All commands accept a global `--seed` for reproducibility. The API returns a `jo
 - **Prometheus metrics:** generation times, retry rate, population sizes, compliance ratios, events per scenario.
 - **OpenTelemetry traces:** spans for CLI/API, workers, Ollama calls, and storage. Configurable through `core.tracing`.
 
+### Prometheus & Grafana
+
+- When you start the Docker Compose stack the Prometheus UI is exposed on
+  `http://localhost:9090` and Grafana on `http://localhost:3000`.
+- Grafana boots with provisioning from `infra/observability/grafana/` and a
+  default user `admin` / password `azt3knet`. Change
+  `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` in `.env` to override it.
+- Validate that the API metrics endpoint is being scraped by opening the
+  Prometheus UI and checking **Status → Targets** or by using the "API
+  scrape status" panel in the "Azt3kNet overview" dashboard shipped with the
+  repository.
+
 ## 🗄️ Persistence and Migrations
 
 - **Pluggable storage:** SQLite for rapid development; Postgres recommended for integrated testing.
