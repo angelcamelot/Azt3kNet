@@ -160,15 +160,17 @@ deployment scenario.
    Provide at least `MAILCOW_API`, `MAILCOW_API_KEY`, `MAILCOW_SMTP_HOST`,
    `MAILCOW_IMAP_HOST`, `MAILCOW_SMTP_PORT`, and `MAILCOW_IMAP_PORT`.
 
-2. Bootstrap the Mailcow project from the repository root:
+2. Bootstrap the Mailcow project from the repository root. The Docker entrypoint
+   now performs this step automatically when the `api` service starts, but you
+   can still trigger it manually if running outside Docker:
 
    ```bash
    ./infra/docker/mailcow/bootstrap.sh
    ```
 
-   This clones the upstream `mailcow/mailcow-dockerized` repository inside
-   `infra/docker/mailcow/mailcow-dockerized` and generates configuration files
-   pointing to `mail.<your-domain>`.
+   The script clones the upstream `mailcow/mailcow-dockerized` repository
+   inside `infra/docker/mailcow/mailcow-dockerized` and generates configuration
+   files pointing to `mail.<your-domain>`.
 
 3. Start the Mailcow stack:
 

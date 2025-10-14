@@ -276,6 +276,7 @@ stack. The tables below document every variable that the application consumes.
 | `AZT3KNET_MAIL_QUOTA_MB` | Mailbox quota (MiB) enforced during provisioning. |
 | `AZT3KNET_MAIL_TTL` | Default credential TTL when issuing temporary passwords. |
 | `AZT3KNET_MAIL_RATE_LIMIT` | Maximum outbound messages per agent mailbox. |
+| `AZT3KNET_AUTO_BOOTSTRAP_MAILCOW` | When set to `1`, the Docker entrypoint clones Mailcow assets automatically. |
 
 The mail automation workflow—including concrete examples for provisioning
 mailboxes and syncing DNS—is documented in
