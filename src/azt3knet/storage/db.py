@@ -6,15 +6,32 @@ import os
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.orm import Session, sessionmaker
+try:  # pragma: no cover - import guard
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.ext.asyncio import (
+        AsyncEngine,
+        AsyncSession,
+        async_sessionmaker,
+        create_async_engine,
+    )
+    from sqlalchemy.orm import Session, sessionmaker
+    _SQLALCHEMY_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - gracefully degrade in minimal envs
+    Engine = AsyncEngine = Session = AsyncSession = object  # type: ignore[assignment]
+    _SQLALCHEMY_AVAILABLE = False
+
+    def create_engine(*args: Any, **kwargs: Any) -> Engine:  # type: ignore[override]
+        raise ModuleNotFoundError("sqlalchemy is required for persistent storage support")
+
+    def create_async_engine(*args: Any, **kwargs: Any) -> AsyncEngine:  # type: ignore[override]
+        raise ModuleNotFoundError("sqlalchemy is required for persistent storage support")
+
+    def sessionmaker(*args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise ModuleNotFoundError("sqlalchemy is required for persistent storage support")
+
+    def async_sessionmaker(*args: Any, **kwargs: Any) -> Any:  # type: ignore[override]
+        raise ModuleNotFoundError("sqlalchemy is required for persistent storage support")
 
 
 class DatabaseConfigurationError(RuntimeError):
@@ -77,6 +94,11 @@ def create_engine_from_url(
         Additional keyword arguments passed directly to the SQLAlchemy engine
         constructor.
     """
+
+    if not _SQLALCHEMY_AVAILABLE:
+        raise DatabaseConfigurationError(
+            "sqlalchemy is not installed; persistent storage is unavailable in this environment",
+        )
 
     url = _require_database_url(database_url or os.getenv("DATABASE_URL"))
     driver = url.split("+", 1)[-1] if "+" in url else url
