@@ -2,7 +2,11 @@
 # Bootstrap the Mailcow Dockerized stack next to the Azt3kNet project.
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve the repository root by travelling three directories up from the
+# bootstrap script location (infra/docker/mailcow). This keeps the script
+# functional regardless of the working directory from which it is invoked.
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 MAILCOW_DIR="$ROOT_DIR/infra/docker/mailcow/mailcow-dockerized"
 DOMAIN="${DESEC_DOMAIN:-${AZT3KNET_DOMAIN:-azt3knet.dedyn.io}}"
 MAIL_HOST="mail.${DOMAIN}"
