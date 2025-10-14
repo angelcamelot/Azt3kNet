@@ -10,7 +10,12 @@ import typer
 from azt3knet.agent_factory.models import PopulationSpec
 from azt3knet.llm.adapter import LocalLLMAdapter
 from azt3knet.population.builder import generate_population_preview
-from azt3knet.storage.agents import AgentPersistenceError, AgentStore, AgentUniquenessError
+from azt3knet.storage.agents import (
+    AgentPersistenceError,
+    AgentRepository,
+    AgentUniquenessError,
+)
+from azt3knet.storage.db import DatabaseConfigurationError, create_engine_from_url
 
 app = typer.Typer(help="Population utilities for deterministic previews")
 
@@ -27,7 +32,10 @@ def populate(
     create_mailboxes: bool = typer.Option(False, help="Provision Mailcow mailboxes"),
     preview: Optional[int] = typer.Option(None, help="Limit the preview to N agents"),
     persist: bool = typer.Option(False, help="Persist generated agents to storage"),
-    db_path: Optional[str] = typer.Option(None, help="Override the SQLite database path"),
+    database_url: Optional[str] = typer.Option(
+        None,
+        help="Override the DATABASE_URL used for persistence",
+    ),
 ) -> None:
     """Generate a synthetic population preview and optional mailboxes."""
 
@@ -60,7 +68,12 @@ def populate(
         payload["mailboxes"] = [assignment.as_public_dict() for assignment in preview_result.mailboxes]
 
     if persist:
-        store = AgentStore(db_path=db_path) if db_path else AgentStore()
+        try:
+            bundle = create_engine_from_url(database_url)
+        except DatabaseConfigurationError as exc:
+            typer.secho(str(exc), err=True, fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+        store = AgentRepository.from_engine(bundle)
         try:
             persisted = store.persist_agents(preview_result.agents)
         except AgentUniquenessError as exc:

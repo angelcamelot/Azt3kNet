@@ -1,18 +1,19 @@
-"""SQLite-backed persistence helpers for agent profiles."""
+"""SQLAlchemy-backed repository for agent persistence and retrieval."""
 
 from __future__ import annotations
 
-import json
-import os
-import sqlite3
-import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Mapping, Sequence
+import uuid
+
+from sqlalchemy import Select, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from azt3knet.agent_factory.models import AgentProfile
 
-DEFAULT_DB_PATH = os.getenv("AZT3KNET_DB_PATH", "azt3knet.db")
+from .db import EngineBundle, SyncSessionFactory
+from .models.agent import AgentRecord
 
 
 class AgentPersistenceError(RuntimeError):
@@ -23,117 +24,154 @@ class AgentUniquenessError(AgentPersistenceError):
     """Raised when attempting to insert a conflicting agent record."""
 
 
-@dataclass
-class AgentStore:
-    """Persist ``AgentProfile`` entries into a SQLite database."""
+@dataclass(frozen=True)
+class VectorMatch:
+    """Represents an agent matched via a vector search."""
 
-    db_path: str | os.PathLike[str] = DEFAULT_DB_PATH
+    agent: AgentRecord
+    distance: float
 
-    def __post_init__(self) -> None:
-        path = self.db_path
-        if isinstance(path, Path):
-            self._db_path = str(path)
-        else:
-            self._db_path = str(path)
-        if self._db_path != ":memory:":
-            Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._db_path)
+class AgentRepository:
+    """Repository that manages the ``AgentRecord`` lifecycle."""
 
-    def _ensure_schema(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS agents (
-                    id TEXT PRIMARY KEY,
-                    seed TEXT NOT NULL,
-                    username_hint TEXT NOT NULL UNIQUE,
-                    payload TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
+    def __init__(
+        self,
+        session_factory: SyncSessionFactory,
+        *,
+        vector_search_enabled: bool = False,
+    ) -> None:
+        self._session_factory = session_factory
+        self._vector_search_enabled = vector_search_enabled
+
+    @classmethod
+    def from_engine(
+        cls,
+        bundle: EngineBundle,
+        *,
+        vector_search_enabled: bool = False,
+    ) -> "AgentRepository":
+        if bundle.is_async:
+            raise AgentPersistenceError(
+                "AgentRepository currently supports synchronous engines only",
             )
-            conn.commit()
+        return cls(bundle.session_factory, vector_search_enabled=vector_search_enabled)
 
     def persist_agents(
         self,
         agents: Iterable[AgentProfile],
         *,
-        max_retries: int = 3,
-        backoff_base: float = 0.05,
+        embeddings: Mapping[uuid.UUID, Sequence[float]] | None = None,
     ) -> int:
-        """Persist agents ensuring uniqueness and idempotency."""
+        """Persist ``AgentProfile`` instances ensuring uniqueness."""
+
+        if embeddings is None:
+            embeddings = {}
 
         inserted = 0
-        with self._connect() as conn:
-            conn.execute("PRAGMA foreign_keys = ON")
+        session = self._session_factory()
+        try:
             for agent in agents:
-                payload_dict = agent.model_dump(mode="json")
-                payload = json.dumps(payload_dict, sort_keys=True)
-                attempt = 0
-                while True:
-                    try:
-                        conn.execute(
-                            """
-                            INSERT INTO agents (id, seed, username_hint, payload)
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (str(agent.id), agent.seed, agent.username_hint, payload),
-                        )
-                        inserted += 1
-                        break
-                    except sqlite3.IntegrityError as exc:
-                        conn.rollback()
-                        try:
-                            if self._is_same_record(conn, agent, payload_dict):
-                                break
-                        except AgentUniquenessError as unique_exc:  # pragma: no cover - defensive
-                            raise unique_exc from exc
-                        if attempt >= max_retries:
-                            raise AgentPersistenceError(
-                                "Exceeded retries while persisting agent"
-                            ) from exc
-                        if backoff_base:
-                            time.sleep(backoff_base * (2**attempt))
-                        attempt += 1
-            conn.commit()
+                payload = agent.model_dump(mode="json")
+                vector = embeddings.get(agent.id)
+                inserted += self._persist_single(session, agent, payload, vector)
+            session.commit()
+        except AgentPersistenceError:
+            session.rollback()
+            raise
+        except SQLAlchemyError as exc:  # pragma: no cover - defensive
+            session.rollback()
+            raise AgentPersistenceError("Failed to persist agents") from exc
+        finally:
+            session.close()
         return inserted
 
-    def _is_same_record(
-        self, conn: sqlite3.Connection, agent: AgentProfile, payload_dict: dict[str, object]
-    ) -> bool:
-        existing = conn.execute(
-            "SELECT payload FROM agents WHERE id = ?",
-            (str(agent.id),),
-        ).fetchone()
+    def _persist_single(
+        self,
+        session: Session,
+        agent: AgentProfile,
+        payload: dict[str, Any],
+        embedding: Sequence[float] | None,
+    ) -> int:
+        existing = session.get(AgentRecord, agent.id)
         if existing:
-            stored_payload = json.loads(existing[0])
-            if stored_payload == payload_dict:
-                return True
+            return self._handle_existing(existing, payload, embedding)
+
+        username_match = session.execute(
+            select(AgentRecord).where(AgentRecord.username_hint == agent.username_hint),
+        ).scalar_one_or_none()
+        if username_match:
+            if username_match.id == agent.id and username_match.payload == payload:
+                return self._handle_existing(username_match, payload, embedding)
             raise AgentUniquenessError(
-                f"Agent {agent.id} already exists with different data"
+                f"username_hint {agent.username_hint!r} already assigned to agent {username_match.id}",
             )
 
-        existing = conn.execute(
-            "SELECT id, payload FROM agents WHERE username_hint = ?",
-            (agent.username_hint,),
-        ).fetchone()
-        if existing:
-            existing_id, payload = existing
-            stored_payload = json.loads(payload)
-            if existing_id == str(agent.id) and stored_payload == payload_dict:
-                return True
-            raise AgentUniquenessError(
-                f"username_hint {agent.username_hint!r} is already assigned to agent {existing_id}"
-            )
+        record = AgentRecord(
+            id=agent.id,
+            seed=agent.seed,
+            username_hint=agent.username_hint,
+            payload=payload,
+            embedding=list(embedding) if embedding is not None else None,
+        )
+        session.add(record)
+        return 1
 
-        return False
+    def _handle_existing(
+        self,
+        existing: AgentRecord,
+        payload: dict[str, Any],
+        embedding: Sequence[float] | None,
+    ) -> int:
+        if existing.payload != payload:
+            raise AgentUniquenessError(
+                f"Agent {existing.id} already exists with different data",
+            )
+        if embedding is not None:
+            new_vector = list(embedding)
+            if existing.embedding != new_vector:
+                existing.embedding = new_vector
+        return 0
+
+    def fetch_by_id(self, agent_id: uuid.UUID) -> AgentRecord | None:
+        """Return a persisted agent by identifier."""
+
+        session = self._session_factory()
+        try:
+            return session.get(AgentRecord, agent_id)
+        finally:
+            session.close()
+
+    def similar_to_embedding(
+        self,
+        embedding: Sequence[float],
+        *,
+        limit: int = 10,
+    ) -> list[VectorMatch]:
+        """Perform a vector similarity search using ``pgvector`` operations."""
+
+        if not self._vector_search_enabled:
+            raise AgentPersistenceError("Vector search is not enabled for this repository")
+
+        session = self._session_factory()
+        try:
+            distance_expression = AgentRecord.embedding.l2_distance(list(embedding))
+            stmt: Select[tuple[AgentRecord, float]] = (
+                select(AgentRecord, distance_expression.label("distance"))
+                .where(AgentRecord.embedding.is_not(None))
+                .order_by(distance_expression)
+                .limit(limit)
+            )
+            results = session.execute(stmt).all()
+            return [VectorMatch(agent=row[0], distance=float(row[1])) for row in results]
+        finally:
+            session.close()
 
 
 __all__ = [
-    "AgentStore",
     "AgentPersistenceError",
+    "AgentRepository",
     "AgentUniquenessError",
+    "VectorMatch",
 ]
+
