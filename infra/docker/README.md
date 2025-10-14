@@ -47,6 +47,18 @@ objects stored locally.
 > builds and runs the FastAPI surface together with these dependencies.
 > Use `./scripts/dev_up.sh` to start the full stack in one command.
 
+## Observability services
+
+- Prometheus is available at `http://localhost:9090` and Grafana at
+  `http://localhost:3000` when this compose file is running.
+- Grafana is provisioned from `../observability/grafana/` with the default
+  credentials `admin` / `azt3knet`. Set
+  `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD` in `.env` to change them.
+- Confirm that the API metrics endpoint is being scraped by opening the
+  Prometheus UI (**Status → Targets**) or by checking the "API scrape status"
+  stat panel inside the "Azt3kNet overview" dashboard that ships with the
+  provisioning bundle.
+
 ## Postgres extensions and TimescaleDB
 
 - `infra/docker/postgres-init/00-enable-vector.sql` runs on first boot to
