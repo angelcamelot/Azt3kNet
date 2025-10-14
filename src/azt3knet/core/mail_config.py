@@ -50,6 +50,9 @@ class MailProvisioningSettings:
 
     domain: str = field(default_factory=_env_factory("AZT3KNET_DOMAIN", ""))
     agent_mail_prefix: str = field(default_factory=_env_factory("AZT3KNET_AGENT_MAIL_PREFIX", "agent_"))
+    agent_mail_password: str = field(
+        default_factory=_env_factory("AZT3KNET_AGENT_MAIL_PASSWORD", "")
+    )
     mailbox_quota_mb: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_QUOTA_MB", "1024"))
     default_ttl: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_TTL", "300"))
     rate_limit_per_hour: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_RATE_LIMIT", "100"))
