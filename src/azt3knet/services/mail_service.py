@@ -94,6 +94,8 @@ class MailService:
                     message[key] = value
         if isinstance(text_part, str) and text_part.strip():
             message.set_content(text_part)
+            if isinstance(html_part, str) and html_part.strip():
+                message.add_alternative(html_part, subtype="html")
         elif isinstance(html_part, str) and html_part.strip():
             message.set_content(html_part, subtype="html")
         else:
