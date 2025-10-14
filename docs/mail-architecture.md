@@ -172,6 +172,30 @@ payloads into structured `EmailMessage` objects for downstream processing.
 3. After DNS changes propagate, finalize the domain verification in the Mailjet
    console. Mailjet should report successful DKIM/SPF checks.
 
+### Cloudflare Tunnel + deSEC
+
+Expose the FastAPI surface through Cloudflare while keeping DNS delegated to
+deSEC:
+
+1. Create a tunnel in the Cloudflare Zero Trust dashboard and add a public
+   hostname pointing to `http://api:8000` (or the service URL you prefer).
+2. Copy the tunnel token and fill the Cloudflare variables in `.env`:
+
+   ```env
+   CLOUDFLARE_TUNNEL_TOKEN=<token>
+   CLOUDFLARE_TUNNEL_HOSTNAME=api.azt3knet.dedyn.io
+   CLOUDFLARE_TUNNEL_SERVICE=http://api:8000
+   CLOUDFLARE_TUNNEL_CNAME=<uuid>.cfargotunnel.com
+   ```
+
+3. Start Docker with `--profile cloudflare` so the `cloudflared` sidecar joins
+   the compose network.
+4. Run `scripts/dns_bootstrap.py` to publish the CNAME pointing at the
+   Cloudflare tunnel (`api IN CNAME <uuid>.cfargotunnel.com`).
+
+Requests for `https://api.azt3knet.dedyn.io` now reach Cloudflare, which
+terminates TLS and forwards traffic to the Docker network through the tunnel.
+
 ### Provision agent identities
 
 Invoke the CLI with the `--create-mailboxes` flag to provision Mailjet identities

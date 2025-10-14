@@ -29,7 +29,13 @@ def test_bootstrap_mail_records_uses_bulk_upsert(monkeypatch) -> None:
     client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/"))
     dns = DeSECDNSManager(settings, client=client, dyn_client=httpx.Client(transport=httpx.MockTransport(handler)))
 
-    dns.bootstrap_mail_records(mail_host="mail.example.com", public_ip="1.2.3.4", dkim_key="v=DKIM1", ttl=300)
+    dns.bootstrap_mail_records(
+        mx_records=("mail.example.com",),
+        dkim_key="v=DKIM1",
+        ttl=300,
+        a_record_host="mail",
+        a_record_ip="1.2.3.4",
+    )
 
     assert captured["method"] == "PATCH"
     assert captured["path"] == "/api/v1/domains/example.com/rrsets/"
@@ -82,3 +88,36 @@ def test_lookup_public_ip_parses_json() -> None:
     )
 
     assert dns.lookup_public_ip() == "203.0.113.10"
+
+
+def test_upsert_cname_appends_trailing_dot() -> None:
+    settings = DeSECSettings(
+        api_base="https://desec.example/api/v1",
+        domain="example.com",
+        token="token",
+        dyndns_update_url="https://update.example",
+        update_interval_hours=24,
+        default_ttl=300,
+    )
+
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["path"] = request.url.path
+        captured["json"] = json.loads(request.content.decode())
+        return httpx.Response(200, json={})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler), base_url=settings.api_base.rstrip("/"))
+    dns = DeSECDNSManager(settings, client=client, dyn_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    dns.upsert_cname(subname="api", target="abcd1234.cfargotunnel.com", ttl=600)
+
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/api/v1/domains/example.com/rrsets/CNAME/api/"
+    assert captured["json"] == {
+        "subname": "api",
+        "type": "CNAME",
+        "records": ["abcd1234.cfargotunnel.com."],
+        "ttl": 600,
+    }

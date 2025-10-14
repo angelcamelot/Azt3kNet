@@ -53,6 +53,24 @@ services:
       minio:
         condition: service_healthy
 
+  cloudflared:
+    image: cloudflare/cloudflared:2024.8.1
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TUNNEL_HOSTNAME: ${CLOUDFLARE_TUNNEL_HOSTNAME:-}
+      TUNNEL_SERVICE: ${CLOUDFLARE_TUNNEL_SERVICE:-http://api:8000}
+    depends_on:
+      api:
+        condition: service_started
+    profiles:
+      - cloudflare
+
   postgres:
     image: ${POSTGRES_IMAGE:-ankane/pgvector:pg16}
     restart: unless-stopped

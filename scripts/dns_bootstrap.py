@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 
 from azt3knet.core.mail_config import (
+    get_cloudflare_tunnel_settings,
     get_desec_settings,
     get_mail_provisioning_settings,
     get_mailjet_settings,
@@ -44,6 +45,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     mailjet_settings = get_mailjet_settings()
     provisioning_settings = get_mail_provisioning_settings()
     desec_settings = get_desec_settings()
+    cloudflare_settings = get_cloudflare_tunnel_settings()
 
     mx_hosts = tuple(args.mx_hosts) if args.mx_hosts else mailjet_settings.mx_hosts
 
@@ -62,6 +64,23 @@ def main(argv: Optional[list[str]] = None) -> int:
             a_record_ip=public_ip if public_ip else None,
         )
         dns_manager.update_dyndns(hostname=desec_settings.domain, ip_address=public_ip)
+
+        cname_target = cloudflare_settings.normalised_cname_target()
+        if cname_target:
+            subname = cloudflare_settings.cname_subdomain
+            if not subname:
+                hostname = cloudflare_settings.hostname
+                suffix = f".{desec_settings.domain}"
+                if hostname and hostname.endswith(suffix):
+                    subname = hostname[: -len(suffix)].rstrip(".") or "@"
+                elif hostname and hostname == desec_settings.domain:
+                    subname = "@"
+            subname = subname or "@"
+            dns_manager.upsert_cname(
+                subname=subname,
+                target=cname_target,
+                ttl=cloudflare_settings.cname_ttl or provisioning_settings.default_ttl,
+            )
 
     return 0
 

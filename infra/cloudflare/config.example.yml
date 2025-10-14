@@ -1,0 +1,13 @@
+# Optional local configuration for cloudflared when running named tunnels.
+# Replace the placeholders with your tunnel identifier and credentials file name
+# before copying to `infra/cloudflare/config.yml`.
+
+# tunnel: ${CLOUDFLARE_TUNNEL_ID}
+# credentials-file: /etc/cloudflared/${CLOUDFLARE_TUNNEL_CREDENTIALS_FILE}
+
+ingress:
+  - hostname: ${CLOUDFLARE_TUNNEL_HOSTNAME}
+    service: ${CLOUDFLARE_TUNNEL_SERVICE:http://api:8000}
+    originRequest:
+      httpHostHeader: ${CLOUDFLARE_TUNNEL_HOSTNAME}
+  - service: http_status:404

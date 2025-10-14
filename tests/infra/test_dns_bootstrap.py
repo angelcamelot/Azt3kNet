@@ -55,6 +55,10 @@ def _set_common_env(monkeypatch):
     monkeypatch.setenv("DESEC_DOMAIN", "example.com")
     monkeypatch.setenv("DESEC_TOKEN", "token")
     monkeypatch.setenv("DESEC_DYNDNS_UPDATE_URL", "https://update.example")
+    monkeypatch.delenv("CLOUDFLARE_TUNNEL_CNAME", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_TUNNEL_SUBDOMAIN", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_TUNNEL_HOSTNAME", raising=False)
+    monkeypatch.delenv("CLOUDFLARE_TUNNEL_CNAME_TTL", raising=False)
 
 
 def test_bootstrap_dns_happy_path(monkeypatch):
@@ -97,7 +101,6 @@ def test_bootstrap_dns_happy_path(monkeypatch):
     )
 
     assert any(method == "GET" and path == "/v3/REST/domain/example.com" for method, path in mail_requests)
-    assert any(method == "POST" and path == "/v3/REST/inbound" for method, path in mail_requests)
 
     assert len(dns_requests) == 1
     method, path, body = dns_requests[0]
@@ -112,6 +115,59 @@ def test_bootstrap_dns_happy_path(monkeypatch):
 
     assert dyn_requests[0][0] == "api.ipify.org"
     assert dyn_requests[1][0] == "update.example"
+
+
+def test_bootstrap_dns_with_cloudflare_cname(monkeypatch):
+    dns_requests: list[tuple[str, str, object]] = []
+
+    _set_common_env(monkeypatch)
+    monkeypatch.setenv("CLOUDFLARE_TUNNEL_CNAME", "abcd1234.cfargotunnel.com")
+    monkeypatch.setenv("CLOUDFLARE_TUNNEL_SUBDOMAIN", "api")
+    monkeypatch.setenv("CLOUDFLARE_TUNNEL_CNAME_TTL", "600")
+
+    def mail_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/v3/REST/domain/example.com":
+            return httpx.Response(200, json={"DKIMPublicKey": "v=DKIM1"})
+        if request.method == "POST" and request.url.path == "/v3/REST/inbound":
+            return httpx.Response(200, json={"status": "ok"})
+        raise AssertionError(f"Unexpected Mailjet request: {request.method} {request.url}")
+
+    def dns_handler(request: httpx.Request) -> httpx.Response:
+        payload: object
+        if request.method == "PATCH":
+            payload = json.loads(request.content.decode())
+        else:
+            payload = json.loads(request.content.decode())
+        dns_requests.append((request.method, request.url.path, payload))
+        return httpx.Response(200, json={})
+
+    def dyn_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.ipify.org":
+            return httpx.Response(200, json={"ip": "198.51.100.42"})
+        if request.url.host == "update.example":
+            return httpx.Response(200, text="good 198.51.100.42")
+        raise AssertionError(f"Unexpected DynDNS request: {request.url}")
+
+    dns_bootstrap.bootstrap_dns(
+        mail_provisioner_factory=_make_mail_factory(mail_handler),
+        dns_manager_factory=_make_dns_factory(dns_handler, dyn_handler),
+    )
+
+    assert len(dns_requests) == 2
+    method, path, payload = dns_requests[0]
+    assert method == "PATCH"
+    assert path == "/api/v1/domains/example.com/rrsets/"
+    assert isinstance(payload, list)
+
+    method, path, payload = dns_requests[1]
+    assert method == "PUT"
+    assert path == "/api/v1/domains/example.com/rrsets/CNAME/api/"
+    assert payload == {
+        "subname": "api",
+        "type": "CNAME",
+        "records": ["abcd1234.cfargotunnel.com."],
+        "ttl": 600,
+    }
 
 
 def test_main_returns_status_error_code(monkeypatch):

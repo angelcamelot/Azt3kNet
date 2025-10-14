@@ -90,6 +90,26 @@ class DeSECSettings:
     default_ttl: int = field(default_factory=_int_env_factory("AZT3KNET_MAIL_TTL", "300"))
 
 
+@dataclass
+class CloudflareTunnelSettings:
+    """Settings required to operate a Cloudflare Tunnel for the API surface."""
+
+    token: str = field(default_factory=_env_factory("CLOUDFLARE_TUNNEL_TOKEN", ""))
+    hostname: str = field(default_factory=_env_factory("CLOUDFLARE_TUNNEL_HOSTNAME", ""))
+    service_url: str = field(default_factory=_env_factory("CLOUDFLARE_TUNNEL_SERVICE", "http://api:8000"))
+    cname_target: str = field(default_factory=_env_factory("CLOUDFLARE_TUNNEL_CNAME", ""))
+    cname_subdomain: str = field(default_factory=_env_factory("CLOUDFLARE_TUNNEL_SUBDOMAIN", ""))
+    cname_ttl: int = field(default_factory=_int_env_factory("CLOUDFLARE_TUNNEL_CNAME_TTL", "300"))
+
+    def normalised_cname_target(self) -> str:
+        """Return the CNAME target with a trailing dot when applicable."""
+
+        target = self.cname_target.strip()
+        if target and not target.endswith("."):
+            target = f"{target}."
+        return target
+
+
 @lru_cache(maxsize=1)
 def get_mailjet_settings() -> MailjetSettings:
     return MailjetSettings()
@@ -103,4 +123,9 @@ def get_mail_provisioning_settings() -> MailProvisioningSettings:
 @lru_cache(maxsize=1)
 def get_desec_settings() -> DeSECSettings:
     return DeSECSettings()
+
+
+@lru_cache(maxsize=1)
+def get_cloudflare_tunnel_settings() -> CloudflareTunnelSettings:
+    return CloudflareTunnelSettings()
 
