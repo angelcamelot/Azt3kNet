@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from ..core.logging import configure_logging
+from .routes.mailjet_webhook import router as mailjet_router
 from .routes.populate import router as populate_router
 
 configure_logging()
@@ -22,3 +23,4 @@ async def healthcheck() -> dict[str, str]:
 
 
 app.include_router(populate_router, prefix="/api")
+app.include_router(mailjet_router, prefix="/api")
