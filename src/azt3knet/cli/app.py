@@ -49,7 +49,11 @@ def populate(
     ),
     seed: Optional[str] = typer.Option(None, help="Deterministic seed."),
     preview: Optional[int] = typer.Option(None, help="Preview the first N agents."),
-    persist: bool = typer.Option(False, help="Persist the population (stub)."),
+    persist: bool = typer.Option(
+        False,
+        help="Persist the population (stub).",
+        is_flag=True,
+    ),
 ) -> None:
     """Generate a synthetic population preview and print JSON to stdout."""
 
