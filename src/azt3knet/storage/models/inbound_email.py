@@ -1,6 +1,7 @@
-"""SQLAlchemy model describing inbound email records."""
-
 from __future__ import annotations
+from typing import Any
+
+__doc__ = """SQLAlchemy model describing inbound email records."""
 
 import uuid
 from datetime import datetime
