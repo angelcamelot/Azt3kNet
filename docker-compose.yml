@@ -33,7 +33,6 @@ services:
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       AZT3KNET_BLOB_BUCKET: ${AZT3KNET_BLOB_BUCKET:-azt3knet}
-      AZT3KNET_AUTO_BOOTSTRAP_MAILCOW: ${AZT3KNET_AUTO_BOOTSTRAP_MAILCOW:-1}
     volumes:
       - ./:/app
     command:
