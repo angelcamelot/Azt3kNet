@@ -5,7 +5,6 @@ description = "First functional sprint for the Azt3kNet synthetic agent simulato
 authors = ["Azt3kNet Contributors <devnull@example.com>"]
 readme = "README.md"
 packages = [{ include = "azt3knet", from = "src" }]
-requires-poetry = ">=2.2"
 
 [tool.poetry.dependencies]
 python = "^3.11"
