@@ -104,7 +104,11 @@ azt3knet populate \
   --age 18-25 \
   --interests "street art,urban culture" \
   --seed 20241005 \
-  --preview 10
+  --preview-count 10
+
+Use `--preview` to enable preview mode with the default limit, or
+`--preview-count` to explicitly control how many agents are shown without
+persisting them.
 ```
 
 API equivalent:
@@ -132,7 +136,7 @@ POST /api/populate
 | `age_range` | `[min, max]` | Optional | Both bounds inclusive, 13 ≤ age ≤ 90. |
 | `interests` | list of strings | Optional | Must contain ≥ 1 interest if provided. |
 | `seed` | string | Optional | Drives reproducibility; auto-generated if missing. |
-| `preview` | integer | Optional | Shows N records without persisting. |
+| `preview` | integer | Optional | Shows N records without persisting (CLI: `--preview-count`). |
 | `persist` | bool | Optional | If `true`, saves to storage and returns a `job_id`. |
 
 Specifications are transformed into programmatic, precise prompts for Ollama that demand N unique records adhering to the schema above and compliance policies.
@@ -353,7 +357,7 @@ blueprint, environment variables and bootstrap scripts. Core modules live under
    To generate a preview population via the CLI inside the container, run:
 
    ```bash
-   docker compose run --rm api azt3knet populate --gender female --count 10 --country MX --preview 3
+  docker compose run --rm api azt3knet populate --gender female --count 10 --country MX --preview-count 3
    ```
 
 6. When finished, shut everything down and remove containers with:

@@ -30,7 +30,16 @@ def populate(
     interests: Optional[str] = typer.Option(None, help="Comma separated interests"),
     seed: Optional[str] = typer.Option(None, help="Deterministic seed"),
     create_mailboxes: bool = typer.Option(False, help="Provision Mailjet mailboxes"),
-    preview: Optional[int] = typer.Option(None, help="Limit the preview to N agents"),
+    preview: bool = typer.Option(
+        False,
+        help="Enable preview mode without persisting agents.",
+        is_flag=True,
+    ),
+    preview_count: Optional[int] = typer.Option(
+        None,
+        min=1,
+        help="Limit the preview to N agents",
+    ),
     persist: bool = typer.Option(False, help="Persist generated agents to storage"),
     database_url: Optional[str] = typer.Option(
         None,
@@ -38,6 +47,14 @@ def populate(
     ),
 ) -> None:
     """Generate a synthetic population preview and optional mailboxes."""
+
+    preview_value: Optional[int]
+    if preview_count is not None:
+        preview_value = preview_count
+    elif preview:
+        preview_value = count
+    else:
+        preview_value = None
 
     spec = PopulationSpec(
         count=count,
@@ -47,7 +64,7 @@ def populate(
         age_range=_parse_age_range(age_range),
         interests=_parse_interests(interests),
         seed=seed,
-        preview=preview,
+        preview=preview_value,
         persist=persist,
     )
     adapter = LocalLLMAdapter()
