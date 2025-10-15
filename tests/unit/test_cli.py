@@ -55,7 +55,7 @@ def test_cli_populate_outputs_preview_json():
             "2",
             "--country",
             "MX",
-            "--preview",
+            "--preview-count",
             "1",
             "--seed",
             "cli-seed",
@@ -66,6 +66,25 @@ def test_cli_populate_outputs_preview_json():
     assert len(data) == 1
     assert data[0]["seed"] == "cli-seed:0"
     _assert_agent_payload(data[0])
+
+
+def test_cli_populate_preview_flag_uses_default_limit():
+    result = runner.invoke(
+        app,
+        [
+            "populate",
+            "--count",
+            "2",
+            "--country",
+            "MX",
+            "--preview",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert len(data) == 2
+    for agent in data:
+        _assert_agent_payload(agent)
 
 
 def test_cli_populate_rejects_invalid_gender():

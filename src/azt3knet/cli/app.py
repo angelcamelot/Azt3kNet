@@ -48,7 +48,16 @@ def populate(
         help="Comma separated list of interests (e.g. 'street art,urban culture').",
     ),
     seed: Optional[str] = typer.Option(None, help="Deterministic seed."),
-    preview: Optional[int] = typer.Option(None, help="Preview the first N agents."),
+    preview: bool = typer.Option(
+        False,
+        help="Enable preview mode without persisting agents.",
+        is_flag=True,
+    ),
+    preview_count: Optional[int] = typer.Option(
+        None,
+        min=1,
+        help="Limit the preview to N agents.",
+    ),
     persist: bool = typer.Option(
         False,
         help="Persist the population (stub).",
@@ -72,6 +81,14 @@ def populate(
 
     interests_list = interests.split(",") if interests else None
     resolved_seed, numeric_seed = derive_seed_components(seed, namespace="cli")
+    preview_value: Optional[int]
+    if preview_count is not None:
+        preview_value = _apply_preview_limit(preview_count)
+    elif preview:
+        preview_value = _apply_preview_limit(count)
+    else:
+        preview_value = None
+
     spec = PopulationSpec(
         gender=gender,  # type: ignore[arg-type]
         count=count,
@@ -80,7 +97,7 @@ def populate(
         age_range=age_range,
         interests=interests_list,
         seed=resolved_seed,
-        preview=_apply_preview_limit(preview),
+        preview=preview_value,
         persist=persist,
     )
 
