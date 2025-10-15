@@ -12,10 +12,10 @@ WORKDIR /app
 
 # Install system dependencies required by popular Python packages.
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y build-essential git \
+    && apt-get install --no-install-recommends -y build-essential curl git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md entrypoint.sh ./
 COPY src ./src
 
 RUN pip install --upgrade pip \
@@ -27,5 +27,5 @@ COPY infra ./infra
 
 EXPOSE 8000
 
-ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["uvicorn", "azt3knet.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
