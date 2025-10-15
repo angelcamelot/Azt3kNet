@@ -24,14 +24,21 @@ class OptionInfo:
     default: Any
     min: Optional[int] = None
     help: Optional[str] = None
+    is_flag: bool = False
 
     @property
     def required(self) -> bool:
         return self.default is ...
 
 
-def Option(default: Any = ..., *, min: Optional[int] = None, help: Optional[str] = None) -> OptionInfo:
-    return OptionInfo(default=default, min=min, help=help)
+def Option(
+    default: Any = ...,
+    *,
+    min: Optional[int] = None,
+    help: Optional[str] = None,
+    is_flag: bool = False,
+) -> OptionInfo:
+    return OptionInfo(default=default, min=min, help=help, is_flag=is_flag)
 
 
 def echo(message: str) -> None:
@@ -108,7 +115,7 @@ class Typer:
             annotation = signature.parameters[name].annotation
             option_info = options[name]
             next_is_option = index >= len(tokens) or tokens[index].startswith("--")
-            if annotation is bool and next_is_option:
+            if (annotation is bool or option_info.is_flag) and next_is_option:
                 values[name] = True
                 continue
             if index >= len(tokens):
